@@ -5,23 +5,24 @@ from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request as GoogleRequest
-from google.oauth2.credentials import Credentials
 from models import User, UserAnalyticsToken
 from database import get_db
 from jose import jwt
 from sqlalchemy.orm import Session
-import json
 import urllib.parse
 
 router = APIRouter()
 
 CLIENT_SECRETS_FILE = "/etc/secrets/client_secret.json"
+
 SCOPES = [
-    "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/analytics.readonly",
+    "https://www.googleapis.com/auth/webmasters.readonly",
     "openid"
 ]
+
 REDIRECT_URI = "https://breevo-backend.onrender.com/google-auth/callback"
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "mysecret")
 ALGORITHM = "HS256"
@@ -34,36 +35,32 @@ def login():
         redirect_uri=REDIRECT_URI
     )
     auth_url, _ = flow.authorization_url(
-        prompt="consent", access_type="offline", include_granted_scopes="true"
+        prompt="consent",
+        access_type="offline",
+        include_granted_scopes="false"  # ✅ مهم لحل مشكلة scope mismatch
     )
     return RedirectResponse(auth_url)
 
-
 @router.get("/google-auth/callback")
 def callback(request: Request, db: Session = Depends(get_db)):
-    print("🔁 OAuth Callback URL:", str(request.url))
-
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI
     )
 
-    # تحقق من وجود الكود
+    import urllib.parse
     parsed_url = urllib.parse.urlparse(str(request.url))
     query_params = urllib.parse.parse_qs(parsed_url.query)
 
     if 'code' not in query_params:
-        print("❌ OAuth failed: 'code' parameter is missing.")
-        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/")
-
+        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/error-auth")
 
     try:
         flow.fetch_token(authorization_response=str(request.url))
     except Exception as e:
-        print("❌ Error during token fetch:", e)
-        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/")
-
+        print("❌ Error fetching token:", e)
+        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/error-auth")
 
     credentials = flow.credentials
     request_session = GoogleRequest()
@@ -110,4 +107,3 @@ def callback(request: Request, db: Session = Depends(get_db)):
 
     jwt_token = jwt.encode({"user_id": user.id}, SECRET_KEY, algorithm=ALGORITHM)
     return RedirectResponse(f"https://breevo-frontend-etsh.vercel.app/analytics?token={urllib.parse.quote(jwt_token)}")
-
