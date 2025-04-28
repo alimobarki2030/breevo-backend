@@ -10,7 +10,11 @@ print("🚀 بدء تشغيل تطبيق Breevo...")
 app = FastAPI()
 
 # ✅ إعداد CORS للسماح فقط من localhost:3000
-origins = ["http://localhost:3000"]
+origins = [
+    "http://localhost:3000",
+    "https://breevo-frontend-etsh.vercel.app",  # رابط واجهتك على Vercel
+]
+
 print("🌐 إعداد CORS...")
 
 app.add_middleware(

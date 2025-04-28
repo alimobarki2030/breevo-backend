@@ -30,4 +30,5 @@ class UserAnalyticsToken(Base):
     client_id = Column(String)
     client_secret = Column(String)
     property_id = Column(String)
+
     token_uri = Column(String, default="https://oauth2.googleapis.com/token")
