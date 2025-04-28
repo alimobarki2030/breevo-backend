@@ -1,23 +1,24 @@
-from fastapi import Depends, HTTPException, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
-import os
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from jose import jwt
+from database import get_db
+from models import User
 
-# مفتاح التشفير السري (يمكن تخزينه بشكل آمن في .env)
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "mysecret")
+router = APIRouter()
+
+SECRET_KEY = "mysecret"
 ALGORITHM = "HS256"
 
-security = HTTPBearer()
+@router.post("/auth/register")
+def register(email: str, password: str, full_name: str, db: Session = Depends(get_db)):
+    existing = db.query(User).filter_by(email=email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="البريد الإلكتروني مستخدم مسبقًا")
 
-# ✅ هذه الدالة تُستخدم للحصول على المستخدم الحالي بناءً على الـ token
+    user = User(email=email, password=password, full_name=full_name)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("user_id")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="رمز دخول غير صالح")
-        return {"id": user_id}
-    except JWTError:
-        raise HTTPException(status_code=403, detail="تعذر التحقق من المستخدم")
+    token = jwt.encode({"user_id": user.id}, SECRET_KEY, algorithm=ALGORITHM)
+    return {"token": token}

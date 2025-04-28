@@ -10,6 +10,7 @@ from database import get_db
 from jose import jwt
 from sqlalchemy.orm import Session
 import urllib.parse
+import json
 
 router = APIRouter()
 
@@ -37,7 +38,7 @@ def login():
     auth_url, _ = flow.authorization_url(
         prompt="consent",
         access_type="offline",
-        include_granted_scopes="false"  # ✅ مهم لحل مشكلة scope mismatch
+        include_granted_scopes="false"
     )
     return RedirectResponse(auth_url)
 
@@ -49,7 +50,6 @@ def callback(request: Request, db: Session = Depends(get_db)):
         redirect_uri=REDIRECT_URI
     )
 
-    import urllib.parse
     parsed_url = urllib.parse.urlparse(str(request.url))
     query_params = urllib.parse.parse_qs(parsed_url.query)
 
@@ -106,4 +106,18 @@ def callback(request: Request, db: Session = Depends(get_db)):
     db.commit()
 
     jwt_token = jwt.encode({"user_id": user.id}, SECRET_KEY, algorithm=ALGORITHM)
-    return RedirectResponse(f"https://breevo-frontend-etsh.vercel.app/analytics?token={urllib.parse.quote(jwt_token)}")
+
+    # توجيه إلى واجهة الويب مع تمرير token_data
+    token_payload = {
+        "access_token": jwt_token,
+        "refresh_token": credentials.refresh_token,
+        "client_id": credentials.client_id,
+        "client_secret": credentials.client_secret,
+        "token_uri": credentials.token_uri,
+    }
+
+    encoded = urllib.parse.quote(json.dumps(token_payload))
+
+    return RedirectResponse(
+        url=f"https://breevo-frontend-etsh.vercel.app/complete-auth?token_data={encoded}"
+    )
