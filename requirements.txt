@@ -1,0 +1,22 @@
+fastapi==0.103.2
+uvicorn==0.23.2
+sqlalchemy
+httpx
+python-dotenv
+
+# Google OAuth & API
+google-auth==2.22.0
+google-auth-oauthlib==1.0.0
+google-api-python-client==2.93.0
+google-analytics-data
+
+# JWT + التوافق
+python-jose==3.3.0
+pyasn1==0.4.8
+pyasn1-modules==0.2.8
+
+
+
+
+
+
