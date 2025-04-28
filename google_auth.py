@@ -38,6 +38,7 @@ def login():
     )
     return RedirectResponse(auth_url)
 
+
 @router.get("/google-auth/callback")
 def callback(request: Request, db: Session = Depends(get_db)):
     print("🔁 OAuth Callback URL:", str(request.url))
