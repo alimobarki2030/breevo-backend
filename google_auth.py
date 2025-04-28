@@ -15,7 +15,7 @@ import urllib.parse
 
 router = APIRouter()
 
-CLIENT_SECRETS_FILE = "/etc/secrets/client_secret.json"
+CLIENT_SECRETS_FILE = "client_secret.json"
 SCOPES = [
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
