@@ -89,4 +89,4 @@ def callback(request: Request, db: Session = Depends(get_db)):
     db.commit()
 
     jwt_token = jwt.encode({"user_id": user.id}, SECRET_KEY, algorithm=ALGORITHM)
-    return RedirectResponse(f"http://localhost:3000/complete-auth?token={urllib.parse.quote(jwt_token)}")
+    return RedirectResponse(f"https://breevo-frontend-etsh.vercel.app/complete-auth?token={urllib.parse.quote(jwt_token)}")
