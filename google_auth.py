@@ -54,13 +54,15 @@ def callback(request: Request, db: Session = Depends(get_db)):
 
     if 'code' not in query_params:
         print("❌ OAuth failed: 'code' parameter is missing.")
-        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/error-auth")
+        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/")
+
 
     try:
         flow.fetch_token(authorization_response=str(request.url))
     except Exception as e:
         print("❌ Error during token fetch:", e)
-        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/error-auth")
+        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/")
+
 
     credentials = flow.credentials
     request_session = GoogleRequest()
