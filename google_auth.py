@@ -12,20 +12,10 @@ from jose import jwt
 from sqlalchemy.orm import Session
 import json
 import urllib.parse
-import tempfile
 
 router = APIRouter()
 
-# ✅ نقرأ الملف من secret env ونخزّنه مؤقتًا في ملف حقيقي
-client_secret_content = os.environ.get("CLIENT_SECRET_JSON")
-if not client_secret_content:
-    raise Exception("❌ CLIENT_SECRET_JSON environment variable not found!")
-
-with tempfile.NamedTemporaryFile(delete=False, mode="w+", suffix=".json") as temp:
-    temp.write(client_secret_content)
-    temp.flush()
-    CLIENT_SECRETS_FILE = temp.name
-
+CLIENT_SECRETS_FILE = "/etc/secrets/client_secret.json"
 SCOPES = [
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -58,18 +48,21 @@ def callback(request: Request, db: Session = Depends(get_db)):
         redirect_uri=REDIRECT_URI
     )
 
+    # تحقق من وجود الكود
     parsed_url = urllib.parse.urlparse(str(request.url))
     query_params = urllib.parse.parse_qs(parsed_url.query)
 
     if 'code' not in query_params:
         print("❌ OAuth failed: 'code' parameter is missing.")
-        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/error-auth")
+        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/")
+
 
     try:
         flow.fetch_token(authorization_response=str(request.url))
     except Exception as e:
         print("❌ Error during token fetch:", e)
-        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/error-auth")
+        return RedirectResponse("https://breevo-frontend-etsh.vercel.app/")
+
 
     credentials = flow.credentials
     request_session = GoogleRequest()
