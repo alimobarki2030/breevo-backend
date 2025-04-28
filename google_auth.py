@@ -15,14 +15,14 @@ import urllib.parse
 
 router = APIRouter()
 
-CLIENT_SECRETS_FILE = "client_secret.json"
+CLIENT_SECRETS_FILE = "/etc/secrets/client_secret.json"
 SCOPES = [
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid"
 ]
-REDIRECT_URI = "http://localhost:8000/google-auth/callback"
+REDIRECT_URI = "https://breevo-backend.onrender.com/google-auth/callback"
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "mysecret")
 ALGORITHM = "HS256"
 
