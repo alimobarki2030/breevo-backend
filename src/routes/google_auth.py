@@ -5,8 +5,8 @@ from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request as GoogleRequest
-from src.models import User, UserAnalyticsToken
-from src.database import get_db
+from models import User, UserAnalyticsToken
+from database import get_db
 from jose import jwt
 from sqlalchemy.orm import Session
 import urllib.parse

@@ -23,6 +23,6 @@ def get_db():
 
 # ✅ دالة لإنشاء الجداول من models.py
 def create_database():
-    from src.models import Base  # ✅ تم تعديل المسار
+    from models import Base  # ✅ تم تعديل المسار
     Base.metadata.create_all(bind=engine)
     print("✅ تم إنشاء قاعدة البيانات بنجاح.")
