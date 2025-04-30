@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.routes.google_auth import router as google_auth_router
 from src.routes.analytics_routes import router as analytics_router
 from src.routes.ga4 import router as ga4_router
-from src.routes.database import create_database
+from src.database import create_database
 
 print("🚀 بدء تشغيل تطبيق Breevo...")
 
