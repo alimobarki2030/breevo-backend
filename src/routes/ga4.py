@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from database import get_db
-from models import UserAnalyticsToken
-from auth import get_current_user
+from src.database import get_db
+from src.models import UserAnalyticsToken
+from src.auth import get_current_user
 
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Dimension, Metric

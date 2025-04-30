@@ -4,9 +4,9 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from database import get_db
-from models import UserAnalyticsToken
-from auth import get_current_user  # يُفترض أن هذا يُرجع user.id بعد التحقق من الجلسة أو JWT
+from src.database import get_db
+from src.models import UserAnalyticsToken
+from src.auth import get_current_user  # يُفترض أن هذا يُرجع user.id بعد التحقق من الجلسة أو JWT
 
 router = APIRouter()
 
