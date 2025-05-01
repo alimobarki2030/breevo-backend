@@ -1,7 +1,42 @@
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Ignore IDE/editor folders
+.vscode/
+.idea/
+
+# Ignore database files
+*.db
+*.sqlite3
+
+# Ignore secret and credential files
+*.json
+*.pem
+*.key
+*.crt
+
+# Specifically ignore known secret files
 client_secret.json
 service_account.json
 analytics_service_account.json
-__pycache__/
-*.pyc
 
+# Ignore log files
+*.log
 
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore package distributions
+dist/
+build/
+*.egg-info/
