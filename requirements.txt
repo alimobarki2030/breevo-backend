@@ -1,29 +1,16 @@
 fastapi==0.103.2
 uvicorn==0.23.2
-sqlalchemy
-httpx
-python-dotenv
+sqlalchemy==1.4.46
+httpx==0.23.3
+python-dotenv==1.0.0
 
 # Google OAuth & API
 google-auth==2.22.0
 google-auth-oauthlib==1.0.0
 google-api-python-client==2.93.0
-google-analytics-data
+google-analytics-data==0.13.0
 
 # JWT + التوافق
 python-jose==3.3.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
-
-sqlalchemy==1.4.46
-httpx==0.23.3
-python-dotenv==1.0.0
-google-analytics-data==0.13.0
-
-
-
-
-
-
-
-
