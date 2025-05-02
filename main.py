@@ -1,21 +1,25 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from routes.google_auth import router as google_auth_router
 from routes.analytics_routes import router as analytics_router
 from routes.ga4 import router as ga4_router
 from database import create_database
 
-print("🚀 بدء تشغيل تطبيق Breevo...")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 بدء التشغيل: إنشاء قاعدة البيانات...")
+    create_database()
+    yield
+    print("🛑 إيقاف التطبيق")
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
-# ✅ إعداد CORS للسماح فقط من localhost:3000 وواجهة Vercel
 origins = [
     "http://localhost:3000",
-    "https://breevo-frontend-etsh.vercel.app",  # رابط واجهتك الرسمي
+    "https://breevo-frontend-etsh.vercel.app"
 ]
-
-print("🌐 إعداد CORS...")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,24 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ ربط جميع الراوترات
-print("🔌 ربط google_auth_router...")
+# إضافة الراوترات
 app.include_router(google_auth_router)
-
-print("📊 ربط analytics_router...")
-app.include_router(analytics_router, prefix="/analytics")
-
-print("📈 ربط ga4_router...")
-app.include_router(ga4_router, prefix="/analytics")
-
-@app.get("/")
-async def root():
-    return {"message": "Breevo Backend is running 🚀"}
-
-# ✅ تهيئة قاعدة البيانات
-print("🗃️ استدعاء create_database() ...")
-try:
-    create_database()
-    print("✅ قاعدة البيانات تم إنشاؤها بنجاح.")
-except Exception as e:
-    print(f"❌ خطأ أثناء إنشاء قاعدة البيانات: {e}")
+app.include_router(analytics_router)
+app.include_router(ga4_router)
