@@ -1,26 +1,14 @@
-import os
-import json
-from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
-from google_auth_oauthlib.flow import Flow
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 
-router = APIRouter()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-SCOPES = [
-    "https://www.googleapis.com/auth/analytics.readonly",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    "openid"
-]
-REDIRECT_URI = "https://breevo-backend.onrender.com/google-auth/callback"
-
-@router.get("/google-auth/login")
-def login():
-    client_secret_info = json.loads(os.environ["GOOGLE_CLIENT_SECRET_JSON"])
-    flow = Flow.from_client_config(
-        client_secret_info, 
-        scopes=SCOPES, 
-        redirect_uri=REDIRECT_URI
-    )
-    auth_url, _ = flow.authorization_url(prompt="consent")
-    return RedirectResponse(auth_url)
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="الرجاء تسجيل الدخول أولاً",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # ملاحظة: هنا يمكنك لاحقًا فك تشفير JWT للتحقق من المستخدم الحقيقي
+    return {"id": 1, "username": "demo_user"}
