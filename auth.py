@@ -1,14 +1,28 @@
+# auth.py
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 
+# إعداد OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+# إعدادات JWT
+SECRET_KEY = "mysecretkey123"  # ⚠️ ضع secret قوي من environment variables في الإنتاج
+ALGORITHM = "HS256"
+
 def get_current_user(token: str = Depends(oauth2_scheme)):
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="الرجاء تسجيل الدخول أولاً",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    # ملاحظة: هنا يمكنك لاحقًا فك تشفير JWT للتحقق من المستخدم الحقيقي
-    return {"id": 1, "username": "demo_user"}
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="⚠️ الرجاء تسجيل الدخول أولاً",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    return {"id": user_id}
