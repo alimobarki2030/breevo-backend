@@ -1,7 +1,6 @@
 # routes/auth_routes.py
 
 from fastapi import APIRouter, HTTPException, Form
-from utils import create_access_token
 
 router = APIRouter()
 
