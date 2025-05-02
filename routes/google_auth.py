@@ -4,9 +4,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
-from sqlalchemy.orm import Session
-from database import SessionLocal
-from models import UserAnalyticsToken
 
 router = APIRouter()
 
@@ -31,6 +28,7 @@ def login():
 
 @router.get("/google-auth/callback")
 def callback(request: Request):
+    state = request.query_params.get("state")
     code = request.query_params.get("code")
 
     client_secret_info = json.loads(os.environ["GOOGLE_CLIENT_SECRET_JSON"])
@@ -42,19 +40,11 @@ def callback(request: Request):
     flow.fetch_token(code=code)
 
     credentials: Credentials = flow.credentials
+    access_token = credentials.token
     refresh_token = credentials.refresh_token
+    id_token = credentials.id_token
 
-    # احفظ في قاعدة البيانات
-    db: Session = SessionLocal()
-    token_entry = UserAnalyticsToken(
-        user_id=1,  # لاحقًا اربطه بالمستخدم الفعلي
-        refresh_token=refresh_token,
-        client_id=client_secret_info['web']['client_id'],
-        client_secret=client_secret_info['web']['client_secret'],
-        property_id=""  # يمكنك تعبئة property_id لاحقًا من الواجهة الأمامية
-    )
-    db.add(token_entry)
-    db.commit()
-    db.close()
+    # احفظ التوكنات هنا في قاعدة البيانات لو أردت (موجود مسبقًا في مشروعك)
 
-    return {"message": "Tokens saved successfully"}
+    # أعد التوجيه للواجهة الأمامية
+    return RedirectResponse("https://breevo-frontend.vercel.app/analytics")
