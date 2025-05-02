@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routes.google_auth import router as google_auth_router
 from routes.analytics_routes import router as analytics_router
+from routes.auth_routes import router as auth_router  # أضفناها هنا
 from database import engine
 from models import Base
 
@@ -31,3 +32,4 @@ app.add_middleware(
 
 app.include_router(google_auth_router)
 app.include_router(analytics_router)
+app.include_router(auth_router)  # أضفناها هنا
