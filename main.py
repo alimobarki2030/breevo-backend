@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routes.google_auth import router as google_auth_router
 from routes.analytics_routes import router as analytics_router
-from routes.auth_routes import router as auth_router  # أضفناها هنا
 from database import engine
 from models import Base
 
