@@ -1,9 +1,11 @@
+# routes/ga4.py
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
 from models import UserAnalyticsToken
-from auth import get_current_user
+from routes.auth import get_current_user  # ✅ تأكد من المسار الصحيح بعد النقل
 
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Dimension, Metric
@@ -25,7 +27,7 @@ def save_ga4_token(
     current_user: dict = Depends(get_current_user)
 ):
     try:
-        existing = db.query(UserAnalyticsToken).filter_by(user_id=current_user["id"]).first()
+        existing = db.query(UserAnalyticsToken).filter_by(user_id=current_user["user_id"]).first()
 
         if existing:
             existing.refresh_token = data.refresh_token
@@ -34,7 +36,7 @@ def save_ga4_token(
             existing.property_id = data.property_id
         else:
             token = UserAnalyticsToken(
-                user_id=current_user["id"],
+                user_id=current_user["user_id"],
                 refresh_token=data.refresh_token,
                 client_id=data.client_id,
                 client_secret=data.client_secret,
@@ -44,11 +46,10 @@ def save_ga4_token(
             db.add(token)
 
         db.commit()
-        return {"message": "تم حفظ بيانات Google Analytics بنجاح."}
+        return {"message": "✅ تم حفظ بيانات Google Analytics بنجاح."}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.post("/ga4/utm-summary")
 def get_utm_campaign_summary(
@@ -56,10 +57,10 @@ def get_utm_campaign_summary(
     current_user: dict = Depends(get_current_user)
 ):
     try:
-        token = db.query(UserAnalyticsToken).filter_by(user_id=current_user["id"]).first()
+        token = db.query(UserAnalyticsToken).filter_by(user_id=current_user["user_id"]).first()
 
         if not token:
-            raise HTTPException(status_code=404, detail="بيانات Google Analytics غير مرتبطة بالحساب.")
+            raise HTTPException(status_code=404, detail="❌ بيانات Google Analytics غير مرتبطة بالحساب.")
 
         creds = Credentials.from_authorized_user_info(
             info={

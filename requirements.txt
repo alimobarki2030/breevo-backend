@@ -16,4 +16,5 @@ pyasn1==0.4.8
 pyasn1-modules==0.2.8
 
 # إضافات مهمة لضمان السلاسة
-requests
+requests==2.31.0
+passlib[bcrypt]==1.7.4

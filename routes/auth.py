@@ -1,14 +1,15 @@
-# auth.py
+# routes/auth.py
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+import os
 
 # إعداد OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-# إعدادات JWT
-SECRET_KEY = "mysecretkey123"  # ⚠️ ضع secret قوي من environment variables في الإنتاج
+# إعدادات JWT - الأفضل أخذ المفتاح من متغير بيئة
+SECRET_KEY = os.getenv("SECRET_KEY", "mysecretkey123")
 ALGORITHM = "HS256"
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
@@ -25,4 +26,4 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
     
-    return {"id": user_id}
+    return {"user_id": int(user_id)}

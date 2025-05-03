@@ -1,3 +1,5 @@
+# routes/google_auth.py
+
 import os
 import json
 from fastapi import APIRouter, Request
@@ -14,8 +16,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid"
 ]
-REDIRECT_URI = "https://breevo-backend.onrender.com/google-auth/callback"
-SECRET_KEY = "mysecret"  # استبدله بمفتاح آمن
+
+REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://breevo-backend.onrender.com/google-auth/callback")
+SECRET_KEY = os.getenv("SECRET_KEY", "mysecret")
 ALGORITHM = "HS256"
 
 @router.get("/google-auth/login")
@@ -41,7 +44,7 @@ def callback(request: Request):
     flow.fetch_token(code=code)
     credentials: Credentials = flow.credentials
 
-    # أنشئ JWT لتسليمه للواجهة الأمامية
+    # إعداد بيانات JWT للواجهة الأمامية
     token_data = {
         "access_token": credentials.token,
         "refresh_token": credentials.refresh_token,
@@ -49,6 +52,5 @@ def callback(request: Request):
     }
     jwt_token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
 
-    # أعد توجيه العميل للواجهة الأمامية مع تمرير JWT في الرابط
     frontend_redirect_url = f"https://breevo-frontend.vercel.app/complete-auth?token={jwt_token}"
     return RedirectResponse(frontend_redirect_url)
