@@ -2,7 +2,6 @@ from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from google_auth_oauthlib.flow import Flow
-from google.oauth2.credentials import Credentials
 from database import get_db
 from models import User, UserAnalyticsToken
 import os
@@ -10,8 +9,6 @@ import jwt
 
 router = APIRouter()
 
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "mysecret")
 ALGORITHM = "HS256"
 
@@ -51,7 +48,6 @@ async def callback(request: Request, db: Session = Depends(get_db)):
     flow.fetch_token(code=code)
     credentials = flow.credentials
 
-    # هنا يفترض تجلب بيانات البريد من id_token
     user_email = credentials.id_token.get("email")
 
     user = db.query(User).filter(User.email == user_email).first()
