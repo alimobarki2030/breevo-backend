@@ -13,7 +13,7 @@ router = APIRouter()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 
-@router.get("/google-auth/login")
+@router.get("/login")
 def login(request: Request):
     client_secrets_json = os.getenv("GOOGLE_CLIENT_SECRET_JSON")
     client_secrets = json.loads(client_secrets_json)
@@ -32,7 +32,7 @@ def login(request: Request):
     auth_url, _ = flow.authorization_url(prompt='consent')
     return RedirectResponse(auth_url)
 
-@router.get("/google-auth/callback")
+@router.get("/callback")
 def callback(request: Request, db: Session = Depends(get_db)):
     code = request.query_params.get('code')
     
