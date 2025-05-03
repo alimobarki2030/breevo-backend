@@ -33,3 +33,16 @@ def get_user_token(user_id: int, db: Session):
         "refresh_token": token_entry.refresh_token,
         "id_token": token_entry.id_token
     }
+
+@router.get("/test-token")
+def get_test_token(db: Session = Depends(get_db)):
+    token_entry = db.query(UserAnalyticsToken).first()
+    if not token_entry:
+        raise HTTPException(status_code=404, detail="❌ لا توجد توكنات مخزنة في قاعدة البيانات")
+    return {
+        "user_id": token_entry.user_id,
+        "access_token": token_entry.access_token,
+        "refresh_token": token_entry.refresh_token,
+        "id_token": token_entry.id_token,
+    }
+
