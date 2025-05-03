@@ -33,5 +33,5 @@ app.add_middleware(
 )
 
 app.include_router(google_auth_router)
-app.include_router(analytics_router)
+app.include_router(analytics_router, prefix="/analytics")
 app.include_router(auth_router)
