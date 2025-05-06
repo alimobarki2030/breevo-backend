@@ -8,7 +8,7 @@ __pycache__/
 venv/
 env/
 .venv/
-.env/
+.env
 
 # Ignore IDE/editor folders
 .vscode/
