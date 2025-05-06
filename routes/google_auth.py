@@ -26,7 +26,8 @@ def google_login():
                 "redirect_uris": [REDIRECT_URI]
             }
         },
-        scopes=SCOPES
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI  # ✅ هذا السطر المهم
     )
     auth_url, _ = flow.authorization_url(prompt='consent')
     return RedirectResponse(auth_url)
