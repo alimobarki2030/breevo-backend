@@ -1,12 +1,15 @@
 import os
 import json
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse, JSONResponse
+from sqlalchemy.orm import Session
 from google_auth_oauthlib.flow import Flow
+from database import get_db
+from models import UserAnalyticsToken
 
 router = APIRouter()
 
-# اقرأ JSON مباشرة من GOOGLE_CLIENT_SECRET_JSON
+# تحميل إعدادات Google OAuth من متغير البيئة
 client_secret_json = os.getenv("GOOGLE_CLIENT_SECRET_JSON")
 if not client_secret_json:
     raise Exception("Missing GOOGLE_CLIENT_SECRET_JSON in environment variables")
@@ -30,7 +33,7 @@ def google_login():
     return RedirectResponse(auth_url)
 
 @router.get("/google-auth/callback")
-async def auth_callback(request: Request):
+async def auth_callback(request: Request, db: Session = Depends(get_db)):
     state = request.query_params.get("state")
     code = request.query_params.get("code")
 
@@ -44,13 +47,24 @@ async def auth_callback(request: Request):
         redirect_uri=REDIRECT_URI
     )
     flow.fetch_token(code=code)
-
     credentials = flow.credentials
-    return JSONResponse({
-        "access_token": credentials.token,
-        "refresh_token": credentials.refresh_token,
-        "token_uri": credentials.token_uri,
-        "client_id": credentials.client_id,
-        "client_secret": credentials.client_secret,
-        "scopes": credentials.scopes
-    })
+
+    # ⚡ TODO: احفظ التوكن في قاعدة البيانات حسب user_id
+    # مثال:
+    # user_id = extract_user_id_somehow()
+    # user_token = UserAnalyticsToken(
+    #     user_id=user_id,
+    #     access_token=credentials.token,
+    #     refresh_token=credentials.refresh_token,
+    #     token_uri=credentials.token_uri,
+    #     client_id=credentials.client_id,
+    #     client_secret=credentials.client_secret,
+    #     scopes=",".join(credentials.scopes)
+    # )
+    # db.add(user_token)
+    # db.commit()
+
+    # ✅ إعادة التوجيه إلى صفحة اختيار الموقع في الواجهة الأمامية
+    return RedirectResponse(
+        url="https://breevo-frontend.vercel.app/site-selector"
+    )
