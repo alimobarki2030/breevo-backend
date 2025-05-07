@@ -6,9 +6,12 @@ from google_auth_oauthlib.flow import Flow
 
 router = APIRouter()
 
-# إعدادات OAuth
-CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+# اقرأ JSON مباشرة من GOOGLE_CLIENT_SECRET_JSON
+client_secret_json = os.getenv("GOOGLE_CLIENT_SECRET_JSON")
+if not client_secret_json:
+    raise Exception("Missing GOOGLE_CLIENT_SECRET_JSON in environment variables")
+client_config = json.loads(client_secret_json)
+
 REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
 SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
@@ -16,26 +19,16 @@ SCOPES = [
     "openid"
 ]
 
-# مسار تسجيل الدخول
 @router.get("/google-auth/login")
 def google_login():
     flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [REDIRECT_URI]
-            }
-        },
+        client_config,
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI
     )
     auth_url, _ = flow.authorization_url(prompt='consent')
     return RedirectResponse(auth_url)
 
-# مسار استقبال callback
 @router.get("/google-auth/callback")
 async def auth_callback(request: Request):
     state = request.query_params.get("state")
@@ -45,15 +38,7 @@ async def auth_callback(request: Request):
         return JSONResponse({"error": "Missing code in callback"}, status_code=400)
 
     flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [REDIRECT_URI]
-            }
-        },
+        client_config,
         scopes=SCOPES,
         state=state,
         redirect_uri=REDIRECT_URI
