@@ -6,6 +6,9 @@ from routes.auth_routes import router as auth_router
 from routes.google_auth import router as google_router
 from routes.analytics_routes import router as analytics_router
 from routes.ga4 import router as ga4_router
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 

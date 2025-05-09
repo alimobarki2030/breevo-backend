@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship
 from database import Base
 
 class User(Base):
@@ -8,3 +9,18 @@ class User(Base):
     hashed_password = Column(String, nullable=True)
     google_id = Column(String, nullable=True)
     auth_provider = Column(String, default='manual')
+
+    analytics_tokens = relationship("UserAnalyticsToken", back_populates="user")
+
+class UserAnalyticsToken(Base):
+    __tablename__ = 'user_analytics_tokens'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    access_token = Column(String, nullable=False)
+    refresh_token = Column(String, nullable=True)
+    token_uri = Column(String, nullable=False)
+    client_id = Column(String, nullable=False)
+    client_secret = Column(String, nullable=False)
+    scopes = Column(String, nullable=False)
+
+    user = relationship("User", back_populates="analytics_tokens")
