@@ -2,9 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import engine, Base
-from routes.auth_routes import router as auth_router
-from routes.analytics_routes import router as analytics_router
-from routes.ga4 import router as ga4_router
 from dotenv import load_dotenv
 
 load_dotenv()
