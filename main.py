@@ -21,7 +21,7 @@ app.add_middleware(
 )
 
 # ✅ إضافة المسارات (routers)
-app.include_router(auth_router)
+app.include_router(auth_router, prefix="/auth")
 
 # ✅ مسار الجذر
 @app.get("/")
