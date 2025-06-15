@@ -1,44 +1,54 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Form, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User
-from utils import hash_password, verify_password, create_access_token
-from pydantic import BaseModel, EmailStr
+from utils import verify_password, hash_password, create_access_token
 
 router = APIRouter()
 
-# ✅ تعريف الـ Schemas
-class RegisterInput(BaseModel):
-    full_name: str
-    email: EmailStr
-    password: str
-
-class LoginInput(BaseModel):
-    email: EmailStr
-    password: str
-
 # ✅ تسجيل مستخدم جديد
-@router.post("/register")
-def register_user(payload: RegisterInput, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.email == payload.email).first()
+@router.post("/auth/register")
+def register(
+    full_name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    phone: str = Form(...),
+    store_url: str = Form(...),
+    heard_from: str = Form(None),
+    plan: str = Form("free"),
+    db: Session = Depends(get_db)
+):
+    existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="البريد الإلكتروني مستخدم بالفعل")
 
-    hashed_password = hash_password(payload.password)
-    new_user = User(full_name=payload.full_name, email=payload.email, hashed_password=hashed_password)
+    new_user = User(
+        full_name=full_name,
+        email=email,
+        hashed_password=hash_password(password),
+        phone=phone,
+        store_url=store_url,
+        heard_from=heard_from,
+        plan=plan,
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    token = create_access_token({"sub": str(new_user.id)})
-    return {"token": token}
+    token = create_access_token(data={"sub": str(new_user.id)})
+    return {"token": token, "clientName": new_user.full_name}
 
-# ✅ تسجيل دخول يدوي
-@router.post("/manual-login")
-def manual_login(payload: LoginInput, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="البريد الإلكتروني أو كلمة المرور غير صحيحة")
 
-    token = create_access_token({"sub": str(user.id)})
-    return {"token": token}
+# ✅ تسجيل الدخول اليدوي
+@router.post("/auth/manual-login")
+def manual_login(
+    email: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="❌ البريد أو كلمة المرور غير صحيحة")
+    
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return {"access_token": access_token, "token_type": "bearer"}
