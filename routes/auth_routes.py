@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 from jose import jwt
@@ -16,6 +16,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# ✅ مخطط البيانات المستخدم للتسجيل
 class RegisterUser(BaseModel):
     full_name: str
     email: EmailStr
@@ -25,24 +26,35 @@ class RegisterUser(BaseModel):
     heard_from: str
     plan: str
 
+# ✅ مخطط البيانات المستخدم لتسجيل الدخول
 class LoginUser(BaseModel):
     email: EmailStr
     password: str
 
+# ✅ دالة لإنشاء التوكن
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+# ✅ مسار تسجيل مستخدم جديد
 @router.post("/auth/register")
-def register_user(user: RegisterUser, db: Session = Depends(get_db)):
+async def register_user(request: Request, db: Session = Depends(get_db)):
+    body = await request.json()
+    print("📦 JSON المستلم من الواجهة:", body)
+
+    try:
+        user = RegisterUser(**body)
+    except Exception as e:
+        print("❌ خطأ في التحقق من البيانات:", e)
+        raise HTTPException(status_code=422, detail="صيغة البيانات غير صحيحة")
+
     existing_user = db.query(User).filter(User.email == user.email).first()
     if existing_user:
         print("⚠️ البريد الإلكتروني مستخدم بالفعل")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail="البريد الإلكتروني مستخدم بالفعل"
         )
 
@@ -62,8 +74,14 @@ def register_user(user: RegisterUser, db: Session = Depends(get_db)):
 
     token = create_access_token({"sub": user.email})
     print(f"✅ تم تسجيل المستخدم بنجاح: {user.email}")
-    return {"access_token": token, "token_type": "bearer"}
+    return {
+    "access_token": token,
+    "token_type": "bearer",
+    "full_name": db_user.full_name  # ✅ أضفنا اسم العميل
+}
 
+
+# ✅ مسار تسجيل الدخول اليدوي
 @router.post("/auth/manual-login")
 def manual_login(user: LoginUser, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
