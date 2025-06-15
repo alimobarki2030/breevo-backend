@@ -7,7 +7,7 @@ from utils import verify_password, hash_password, create_access_token
 router = APIRouter()
 
 # ✅ تسجيل الدخول اليدوي
-@router.post("/auth/manual-login")
+@router.post("/manual-login")
 def manual_login(
     email: str = Form(...),
     password: str = Form(...),
@@ -20,21 +20,18 @@ def manual_login(
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer"}
 
-
 # ✅ تسجيل مستخدم جديد
-@router.post("/auth/register")
+@router.post("/register")
 def register(
     full_name: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    # التحقق من وجود المستخدم مسبقًا
     existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="البريد الإلكتروني مستخدم بالفعل")
 
-    # إنشاء مستخدم جديد
     new_user = User(
         full_name=full_name,
         email=email,
