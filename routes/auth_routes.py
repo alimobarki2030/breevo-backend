@@ -35,7 +35,11 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
     new_user = User(
         full_name=user.full_name,
         email=user.email,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        phone=user.phone,
+        store_url=user.store_url,
+        heard_from=user.heard_from,
+        plan=user.plan
     )
 
     db.add(new_user)
