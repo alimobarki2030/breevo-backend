@@ -12,5 +12,4 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     phone = Column(String, nullable=False)
     store_url = Column(String, nullable=False)
-    heard_from = Column(String, nullable=False)
     plan = Column(String, nullable=False)
