@@ -5,6 +5,7 @@ from database import get_db
 from models import User
 from schemas import UserRegister, UserLogin
 from utils import hash_password as get_password_hash
+from routes.auth_routes import auth_router
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from urllib.parse import urlparse
