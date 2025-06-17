@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User
 from schemas import UserRegister, UserLogin
-from utils import get_password_hash, verify_password, create_access_token
+from utils import hash_password as get_password_hash
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from urllib.parse import urlparse
