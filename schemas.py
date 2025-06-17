@@ -6,7 +6,6 @@ class UserRegister(BaseModel):
     password: str
     phone: str
     store_url: str
-    heard_from: str
     plan: str
 
 class UserLogin(BaseModel):
