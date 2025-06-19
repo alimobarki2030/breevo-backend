@@ -87,32 +87,52 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 @router.post("/auth/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
     """Register a new user"""
-    existing_user = db.query(User).filter(User.email == user.email).first()
-    if existing_user:
+    try:
+        print(f"محاولة تسجيل مستخدم: {user.email}")
+        
+        existing_user = db.query(User).filter(User.email == user.email).first()
+        if existing_user:
+            print(f"البريد الإلكتروني موجود بالفعل: {user.email}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="البريد الإلكتروني مستخدم بالفعل"
+            )
+    except Exception as e:
+        print(f"خطأ في التحقق من البريد الإلكتروني: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="البريد الإلكتروني مستخدم بالفعل"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="حدث خطأ في الخادم"
         )
 
-    hashed_password = get_password_hash(user.password)
-    new_user = User(
-        full_name=user.full_name,
-        email=user.email,
-        hashed_password=hashed_password,
-        phone=user.phone,
-        store_url=normalize_url(user.store_url),
-        plan=user.plan
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    try:
+        hashed_password = get_password_hash(user.password)
+        new_user = User(
+            full_name=user.full_name,
+            email=user.email,
+            hashed_password=hashed_password,
+            phone=user.phone,
+            store_url=normalize_url(user.store_url),
+            plan=user.plan
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
 
-    access_token = create_access_token(data={"sub": str(new_user.id)})
-    return {
-        "access_token": access_token, 
-        "token_type": "bearer", 
-        "client_name": new_user.full_name
-    }
+        access_token = create_access_token(data={"sub": str(new_user.id)})
+        print(f"تم تسجيل المستخدم بنجاح: {user.email}")
+        return {
+            "token": access_token,  # غيّر access_token إلى token
+            "access_token": access_token,  # احتفظ بـ access_token للتوافق
+            "token_type": "bearer", 
+            "client_name": new_user.full_name
+        }
+    except Exception as e:
+        print(f"خطأ في إنشاء المستخدم: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="حدث خطأ في إنشاء المستخدم"
+        )
 
 
 @router.post("/auth/login")
@@ -127,7 +147,8 @@ def login_user(user: UserLogin, db: Session = Depends(get_db)):
 
     access_token = create_access_token(data={"sub": str(db_user.id)})
     return {
-        "access_token": access_token, 
+        "token": access_token,  # غيّر access_token إلى token
+        "access_token": access_token,  # احتفظ بـ access_token للتوافق
         "token_type": "bearer", 
         "client_name": db_user.full_name
     }
