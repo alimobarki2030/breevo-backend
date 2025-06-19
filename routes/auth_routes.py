@@ -77,7 +77,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
+
     user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
         raise credentials_exception
@@ -87,21 +87,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 @router.post("/auth/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
     """Register a new user"""
-    try:
-        print(f"محاولة تسجيل مستخدم: {user.email}")
-        
-        existing_user = db.query(User).filter(User.email == user.email).first()
-        if existing_user:
-            print(f"البريد الإلكتروني موجود بالفعل: {user.email}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
-                detail="البريد الإلكتروني مستخدم بالفعل"
-            )
-    except Exception as e:
-        print(f"خطأ في التحقق من البريد الإلكتروني: {str(e)}")
+    print(f"محاولة تسجيل مستخدم: {user.email}")
+
+    existing_user = db.query(User).filter(User.email == user.email).first()
+    if existing_user:
+        print(f"البريد الإلكتروني موجود بالفعل: {user.email}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="حدث خطأ في الخادم"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="البريد الإلكتروني مستخدم بالفعل"
         )
 
     try:
@@ -121,9 +114,9 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
         access_token = create_access_token(data={"sub": str(new_user.id)})
         print(f"تم تسجيل المستخدم بنجاح: {user.email}")
         return {
-            "token": access_token,  # غيّر access_token إلى token
-            "access_token": access_token,  # احتفظ بـ access_token للتوافق
-            "token_type": "bearer", 
+            "token": access_token,
+            "access_token": access_token,
+            "token_type": "bearer",
             "client_name": new_user.full_name
         }
     except Exception as e:
@@ -141,15 +134,15 @@ def login_user(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="البريد الإلكتروني أو كلمة المرور غير صحيحة"
         )
 
     access_token = create_access_token(data={"sub": str(db_user.id)})
     return {
-        "token": access_token,  # غيّر access_token إلى token
-        "access_token": access_token,  # احتفظ بـ access_token للتوافق
-        "token_type": "bearer", 
+        "token": access_token,
+        "access_token": access_token,
+        "token_type": "bearer",
         "client_name": db_user.full_name
     }
 
