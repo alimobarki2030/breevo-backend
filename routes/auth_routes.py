@@ -25,7 +25,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-auth_router = APIRouter()
+router = APIRouter()
+auth_router = router  # للتوافق مع الكود القديم
 
 
 def normalize_url(url: str) -> str:
@@ -83,7 +84,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 
-@auth_router.post("/auth/register")
+@router.post("/auth/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
     """Register a new user"""
     existing_user = db.query(User).filter(User.email == user.email).first()
@@ -114,7 +115,7 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
     }
 
 
-@auth_router.post("/auth/login")
+@router.post("/auth/login")
 def login_user(user: UserLogin, db: Session = Depends(get_db)):
     """Login user and return access token"""
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -132,14 +133,14 @@ def login_user(user: UserLogin, db: Session = Depends(get_db)):
     }
 
 
-@auth_router.get("/auth/check-email")
+@router.get("/auth/check-email")
 def check_email_exists(email: str, db: Session = Depends(get_db)):
     """Check if email already exists in database"""
     existing_user = db.query(User).filter(User.email == email).first()
     return JSONResponse(content={"exists": bool(existing_user)})
 
 
-@auth_router.get("/auth/me")
+@router.get("/auth/me")
 def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current user information"""
     return {
