@@ -1,0 +1,31 @@
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from openai import OpenAI  # ✅ الصيغة الجديدة
+import os
+from dotenv import load_dotenv
+from routes.auth_routes import get_current_user
+
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # ✅ استخدام الكائن الجديد
+
+router = APIRouter()
+
+class PromptRequest(BaseModel):
+    prompt: str
+
+@router.post("/generate")
+async def generate_text(request: PromptRequest, user=Depends(get_current_user)):
+    try:
+        response = client.chat.completions.create(  # ✅ هذه الطريقة الجديدة
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "أنت مساعد ذكي متخصص في تحسين SEO للمنتجات."},
+                {"role": "user", "content": request.prompt}
+            ],
+            temperature=0.7,
+            max_tokens=800
+        )
+        generated_text = response.choices[0].message.content.strip()
+        return {"text": generated_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"خطأ في توليد النص: {str(e)}")

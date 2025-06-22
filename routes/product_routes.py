@@ -20,3 +20,6 @@ class Product(BaseModel):
 def add_product(product: Product):
     print("✅ تم استلام منتج:", product.dict())
     return {"message": "تم الحفظ", "product": {"id": 1, **product.dict()}}
+
+
+

@@ -3,9 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
 from dotenv import load_dotenv
 from routes.product_routes import router as product_router
-
-
-
+from routes.ai_routes import router as ai_router
 from routes.auth_routes import router as auth_router  # ✅ تم إضافته
 
 load_dotenv()
@@ -27,6 +25,9 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="")  # ✅ تم إضافته
 app.include_router(product_router)
+
+
+app.include_router(ai_router)
 
 
 @app.get("/")
