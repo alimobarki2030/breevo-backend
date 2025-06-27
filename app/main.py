@@ -11,9 +11,11 @@ load_dotenv()
 
 app = FastAPI()
 
+# Updated origins to include your production frontend
 origins = [
-    "http://localhost:3000",
-    "https://breevo-frontend.vercel.app",
+    "http://localhost:3000",  # Local development
+    "https://breevo-frontend.vercel.app",  # Your production frontend
+    "https://your-frontend-domain.vercel.app",  # Add your actual frontend domain
     "https://accounts.google.com",
     "https://www.google.com"
 ]
