@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from database import get_db
-from models import User
-from schemas import UserRegister, UserLogin
+from app.database import get_db
+from app.models import User
+from app.schemas import UserRegister, UserLogin
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 import os
