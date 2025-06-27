@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from app.routers.auth import get_current_user
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 router = APIRouter()
 
