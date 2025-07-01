@@ -14,6 +14,8 @@ app = FastAPI()
 origins = [
     "http://localhost:3000",
     "https://breevo-frontend.vercel.app",
+    "https://seoraysa.com",
+    "https://www.seoraysa.com",
     "https://breevo-backend.onrender.com",
     "https://accounts.google.com",
     "https://www.google.com"
