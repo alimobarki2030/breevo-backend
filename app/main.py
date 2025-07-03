@@ -1,15 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine, Base
+from database import engine, Base
 from dotenv import load_dotenv
-from app.routers.products import router as product_router  # ✅ Added
-from app.routers.ai import router as ai_router
-from app.routers.auth import router as auth_router
-from app.routers.dataforseo import router as dataforseo_router
+
+# ✅ توحيد مسارات imports
+from routers.products import router as product_router
+from routers.ai import router as ai_router
+from routers.auth import router as auth_router
+from routers.dataforseo import router as dataforseo_router
+from routers import salla
 
 load_dotenv()
 
-app = FastAPI()
+app = FastAPI(
+    title="Salla Integration API",
+    description="API لربط وإدارة متاجر سلة",
+    version="1.0.0"
+)
 
 origins = [
     "http://localhost:3000",
@@ -31,25 +38,42 @@ app.add_middleware(
 
 print("✅ Database engine created")
 
+# إنشاء جداول قاعدة البيانات
 Base.metadata.create_all(bind=engine)
 
-# Routers
-app.include_router(product_router)  # ✅ This will add /products endpoints
+# تسجيل الـ Routers
+app.include_router(product_router)
 app.include_router(ai_router)
 app.include_router(auth_router)
 app.include_router(dataforseo_router)
+app.include_router(salla.router)
 
 @app.get("/")
 def read_root():
-    return {"message": "Hello World"}
+    return {
+        "message": "Salla Integration API",
+        "status": "running",
+        "version": "1.0.0"
+    }
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "database": "connected",
+        "services": ["salla", "products", "ai", "auth", "dataforseo"]
+    }
 
 # ✅ Add a test endpoint to verify products API
 @app.get("/test-products")
 def test_products():
-    return {"message": "Products API is working!", "endpoints": [
-        "GET /products - Get user products",
-        "POST /products - Create product",
-        "GET /products/{id} - Get product",
-        "PUT /products/{id} - Update product", 
-        "DELETE /products/{id} - Delete product"
-    ]}
+    return {
+        "message": "Products API is working!", 
+        "endpoints": [
+            "GET /products - Get user products",
+            "POST /products - Create product",
+            "GET /products/{id} - Get product",
+            "PUT /products/{id} - Update product", 
+            "DELETE /products/{id} - Delete product"
+        ]
+    }

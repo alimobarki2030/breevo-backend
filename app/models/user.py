@@ -1,5 +1,7 @@
+# models/user.py
 from sqlalchemy import Column, Integer, String
-from app.database import Base
+from sqlalchemy.orm import relationship
+from database import Base
 
 class User(Base):
     __tablename__ = "users"
@@ -11,3 +13,6 @@ class User(Base):
     phone = Column(String, nullable=True)
     store_url = Column(String, nullable=True)
     plan = Column(String, nullable=True)
+    
+    # العلاقة مع متاجر سلة
+    salla_stores = relationship("SallaStore", back_populates="user")
