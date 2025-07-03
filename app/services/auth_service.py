@@ -6,7 +6,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from config import settings
+from app.config import settings
 from app.models.user import User
 
 class AuthService:

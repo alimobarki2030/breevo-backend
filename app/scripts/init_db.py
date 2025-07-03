@@ -89,7 +89,7 @@ def check_database_connection():
 def display_tables_info():
     """عرض معلومات الجداول المنشأة"""
     try:
-        from database import engine
+        from app.database import engine
         from sqlalchemy import inspect
         
         inspector = inspect(engine)
