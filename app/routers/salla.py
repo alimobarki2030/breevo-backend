@@ -5,7 +5,7 @@ import uuid
 import os
 from datetime import datetime, timedelta
 
-from database import get_db
+from app.database import get_db
 from models.user import User
 from models.salla import SallaStore, SallaProduct
 from services.salla_api import SallaAPIService
