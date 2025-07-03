@@ -1,14 +1,15 @@
+# app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database import engine, Base
+from app.database import engine, Base
 from dotenv import load_dotenv
 
-# ✅ توحيد مسارات imports
-from routers.products import router as product_router
-from routers.ai import router as ai_router
-from routers.auth import router as auth_router
-from routers.dataforseo import router as dataforseo_router
-from routers import salla
+# ✅ استيرادات مصححة للـ deployment
+from app.routers.products import router as product_router
+from app.routers.ai import router as ai_router
+from app.routers.auth import router as auth_router
+from app.routers.dataforseo import router as dataforseo_router
+from app.routers import salla
 
 load_dotenv()
 
