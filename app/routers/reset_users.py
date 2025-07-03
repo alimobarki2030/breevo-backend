@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
-from app.database import SessionLocal, engine
-from app.models import User
-from app.routers.products import router as product_router
+from database import SessionLocal, engine
+from models import User
+from routers.products import router as product_router
 
 
 def reset_users():
