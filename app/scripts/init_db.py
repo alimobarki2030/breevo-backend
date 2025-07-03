@@ -30,7 +30,7 @@ def create_admin_user():
     try:
         print("⏳ محاولة إنشاء مستخدم admin...")
         from database import SessionLocal
-        from models.user import User
+        from app.models.user import User
         from app.services.auth_service import auth_service
         
         db = SessionLocal()

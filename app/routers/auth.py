@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 
 from app.database import get_db
-from models.user import User
-from schemas.user import (
+from app.models.user import User
+from app.schemas.user import (
     UserRegister, 
     UserLogin, 
     GoogleLoginRequest,
@@ -15,8 +15,8 @@ from schemas.user import (
     UserUpdate,
     PasswordChangeRequest
 )
-from services.auth_service import auth_service
-from config import settings
+from app.services.auth_service import auth_service
+from app.config import settings
 
 # إنشاء router
 router = APIRouter(prefix="/auth", tags=["authentication"])

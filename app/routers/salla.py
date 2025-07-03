@@ -6,9 +6,9 @@ import os
 from datetime import datetime, timedelta
 
 from app.database import get_db
-from models.user import User
-from models.salla import SallaStore, SallaProduct
-from services.salla_api import SallaAPIService
+from app.models.user import User
+from app.models.salla import SallaStore, SallaProduct
+from app.services.salla_api import SallaAPIService
 from app.routers.auth import get_current_user
 
 # إنشاء router جديد لسلة

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
 from config import settings
-from models.user import User
+from app.models.user import User
 
 class AuthService:
     """خدمة المصادقة المركزية"""
