@@ -3,7 +3,7 @@
 
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
-from database import Base
+from app.database import Base
 from datetime import datetime
 
 class SallaStore(Base):

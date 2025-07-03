@@ -55,9 +55,10 @@ except ImportError as e:
     # محاولة بديلة - بدون مجلد app
     try:
         print("🔄 محاولة استيراد بدون مجلد app...")
-        from database import Base
-        from models.user import User
-        from models.salla import SallaStore, SallaProduct
+        from app.database import Base
+        from app.models.user import User
+        from app.models.salla import SallaStore, SallaProduct
+
         print("✅ تم الاستيراد بدون مجلد app")
     except ImportError as e2:
         print(f"❌ خطأ في الاستيراد البديل أيضاً: {e2}")
