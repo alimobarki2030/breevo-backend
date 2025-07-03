@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from services.dataforseo import make_dataforseo_request
+from app.services.dataforseo import make_dataforseo_request
 
 router = APIRouter()
 
