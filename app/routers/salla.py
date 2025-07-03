@@ -9,7 +9,7 @@ from database import get_db
 from models.user import User
 from models.salla import SallaStore, SallaProduct
 from services.salla_api import SallaAPIService
-from routers.auth import get_current_user
+from app.routers.auth import get_current_user
 
 # إنشاء router جديد لسلة
 router = APIRouter(prefix="/api/salla", tags=["salla"])

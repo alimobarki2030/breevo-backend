@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-from routers.auth import get_current_user
+from app.routers.auth import get_current_user
 
 load_dotenv()
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
