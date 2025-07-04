@@ -26,9 +26,9 @@ class SallaStore(Base):
     token_expires_at = Column(DateTime)  # تاريخ انتهاء الرمز
     
     # إعدادات التكامل
-    auto_RefreshCw_enabled = Column(Boolean, default=True)  # تفعيل المزامنة التلقائية
+    auto_sync_enabled = Column(Boolean, default=True)  # تفعيل المزامنة التلقائية
     webhook_secret = Column(String)  # مفتاح الحماية للإشعارات
-    last_RefreshCw_at = Column(DateTime)  # آخر مزامنة
+    last_sync_at = Column(DateTime)  # آخر مزامنة
     
     # تواريخ الإنشاء والتحديث
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -72,7 +72,7 @@ class SallaProduct(Base):
     status = Column(String)  # حالة (sale, out_of_stock, hidden)
     
     # بيانات المزامنة
-    last_RefreshCwed_at = Column(DateTime, default=datetime.utcnow)  # آخر مزامنة
+    last_synced_at = Column(DateTime, default=datetime.utcnow)  # آخر مزامنة
     needs_update = Column(Boolean, default=False)  # يحتاج تحديث
     
     # تواريخ
