@@ -55,7 +55,7 @@ class ZohoEmailService:
         html_content: str,
         text_content: Optional[str] = None
     ) -> bool:
-        """إرسال إيميل عبر Zoho SMTP"""
+        """إرسال إيميل عبر Zoho SMTP - مُصحح لحل مشكلة TLS"""
         try:
             if self.test_mode:
                 logger.info(f"📧 [TEST MODE] إيميل لـ {to_email}")
@@ -78,14 +78,36 @@ class ZohoEmailService:
             html_part = MIMEText(html_content, "html", "utf-8")
             message.attach(html_part)
 
-            # إرسال الإيميل
-            async with aiosmtplib.SMTP(hostname=self.smtp_server, port=self.smtp_port) as server:
-                await server.starttls()
-                await server.login(self.username, self.password)
-                await server.send_message(message)
+            # ✅ الحل المُصحح: استخدام SSL مباشرة مع port 465
+            try:
+                async with aiosmtplib.SMTP(
+                    hostname=self.smtp_server, 
+                    port=465,  # استخدام SSL port
+                    use_tls=True,  # SSL مباشرة
+                    timeout=30  # مهلة زمنية
+                ) as server:
+                    await server.login(self.username, self.password)
+                    await server.send_message(message)
 
-            logger.info(f"✅ تم إرسال إيميل بنجاح لـ {to_email}")
-            return True
+                logger.info(f"✅ تم إرسال إيميل بنجاح (SSL) لـ {to_email}")
+                return True
+
+            except Exception as ssl_error:
+                logger.warning(f"⚠️ فشل SSL، محاولة STARTTLS لـ {to_email}: {str(ssl_error)}")
+                
+                # ✅ محاولة بديلة مع STARTTLS إذا فشل SSL
+                async with aiosmtplib.SMTP(
+                    hostname=self.smtp_server, 
+                    port=587,  # STARTTLS port
+                    use_tls=False,  # بدون TLS مباشرة
+                    timeout=30
+                ) as server:
+                    await server.starttls()  # بدء TLS
+                    await server.login(self.username, self.password)
+                    await server.send_message(message)
+                
+                logger.info(f"✅ تم إرسال إيميل بنجاح (STARTTLS) لـ {to_email}")
+                return True
 
         except Exception as e:
             logger.error(f"❌ فشل إرسال إيميل لـ {to_email}: {str(e)}")
