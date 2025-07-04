@@ -1,8 +1,9 @@
-# app/main.py
+# app/main.py - التحديث البسيط المطلوب فقط
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from dotenv import load_dotenv
+import os
 
 # ✅ استيرادات مصححة للـ deployment
 from app.routers.products import router as product_router
@@ -19,19 +20,22 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# ✅ التحديث الوحيد المطلوب: إضافة BACKEND_URL من متغيرات البيئة
 origins = [
     "http://localhost:3000",
-    "https://breevo-frontend.vercel.app",
+    "https://breevo-frontend.vercel.app", 
     "https://seoraysa.com",
     "https://www.seoraysa.com",
     "https://breevo-backend.onrender.com",
     "https://accounts.google.com",
-    "https://www.google.com"
+    "https://www.google.com",
+    os.getenv("BACKEND_URL", ""),  # إضافة البيئة المتغيرة
+    os.getenv("FRONTEND_URL", "")  # إضافة البيئة المتغيرة
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[origin for origin in origins if origin],  # تنظيف القائمة
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -63,6 +67,16 @@ def health_check():
         "status": "healthy",
         "database": "connected",
         "services": ["salla", "products", "ai", "auth", "dataforseo"]
+    }
+
+# ✅ إضافة endpoint بسيط لمعلومات النظام
+@app.get("/api/info")
+def system_info():
+    return {
+        "backend_url": os.getenv("BACKEND_URL"),
+        "frontend_url": os.getenv("FRONTEND_URL"),
+        "salla_configured": bool(os.getenv("SALLA_CLIENT_ID")),
+        "email_configured": bool(os.getenv("ZOHO_EMAIL_USERNAME"))
     }
 
 # ✅ Add a test endpoint to verify products API

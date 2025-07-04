@@ -5,12 +5,16 @@ import os
 import json
 import hmac
 import hashlib
+import asyncio
 from datetime import datetime, timedelta
+from typing import Optional
 
 from app.database import get_db
 from app.models.user import User
 from app.models.salla import SallaStore, SallaProduct
+from app.models.pending_store import PendingStore
 from app.services.salla_api import SallaAPIService
+from app.services.email_service import email_service
 from app.routers.auth import get_current_user
 
 # إنشاء router جديد لسلة
@@ -103,6 +107,18 @@ async def handle_oauth_callback(
         db.commit()
         db.refresh(store)
         
+        # 🔥 إرسال إيميل تأكيد الربط
+        try:
+            await email_service.send_store_connected_email(
+                user_email=current_user.email,
+                user_name=current_user.name or current_user.email,
+                store_name=store.store_name,
+                products_synced=0  # سيتم تحديثه بعد المزامنة
+            )
+            print(f"✅ تم إرسال إيميل تأكيد الربط")
+        except Exception as email_error:
+            print(f"⚠️ خطأ في إرسال إيميل الربط: {str(email_error)}")
+        
         return {
             "success": True,
             "message": "تم ربط المتجر بنجاح!",
@@ -129,7 +145,7 @@ async def handle_salla_webhook(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """استقبال ومعالجة webhooks من سلة - مُصحح"""
+    """استقبال ومعالجة webhooks من سلة - مُصحح مع نظام الإيميلات"""
     try:
         # قراءة البيانات
         payload = await request.body()
@@ -201,6 +217,19 @@ async def handle_salla_webhook(
             
         else:
             print(f"⚠️ Unhandled webhook event: {event}")
+        
+        # جدولة مهام الإيميلات في الخلفية عند الأحداث المهمة
+        if event in ["app.installed", "app.store.authorize"]:
+            try:
+                # جدولة مهمة تذكير بعد 25 ساعة
+                background_tasks.add_task(
+                    schedule_reminder_task, 
+                    str(merchant_id), 
+                    delay_hours=25
+                )
+                print(f"📅 Scheduled reminder task for merchant {merchant_id}")
+            except Exception as task_error:
+                print(f"⚠️ Failed to schedule background tasks: {str(task_error)}")
         
         # استجابة سريعة لسلة (مهم: سلة تتوقع 200 OK خلال 30 ثانية)
         return {
@@ -333,36 +362,246 @@ async def get_store_products(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"خطأ في جلب المنتجات: {str(e)}")
 
-# ===== معالجات الأحداث (Background Tasks) - مُصححة =====
+# ===== API Endpoints جديدة للإيميلات =====
+
+@router.get("/pending-stores")
+async def get_pending_stores(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """عرض المتاجر المؤقتة (للمطورين)"""
+    try:
+        # التحقق من صلاحيات المطور
+        if current_user.email not in ["alimobarki.ad@gmail.com", "owner@breevo.com"]:
+            raise HTTPException(status_code=403, detail="غير مخول")
+        
+        pending_stores = db.query(PendingStore).filter(
+            PendingStore.is_claimed == False,
+            PendingStore.expires_at > datetime.utcnow()
+        ).order_by(PendingStore.created_at.desc()).all()
+        
+        return {
+            "success": True,
+            "count": len(pending_stores),
+            "stores": [store.to_dict() for store in pending_stores]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"خطأ في جلب المتاجر المؤقتة: {str(e)}")
+
+@router.post("/test-email")
+async def test_email_system(
+    email_type: str,
+    test_email: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """اختبار نظام الإيميلات (للمطورين)"""
+    try:
+        # التحقق من صلاحيات المطور
+        if current_user.email not in ["alimobarki.ad@gmail.com", "owner@breevo.com"]:
+            raise HTTPException(status_code=403, detail="غير مخول")
+        
+        success = False
+        
+        if email_type == "welcome":
+            success = await email_service.send_store_welcome_email(
+                store_email=test_email,
+                store_name="متجر تجريبي",
+                store_id="TEST123",
+                verification_token="test-token-123",
+                products_count=25
+            )
+        elif email_type == "reminder":
+            success = await email_service.send_store_reminder_email(
+                store_email=test_email,
+                store_name="متجر تجريبي",
+                store_id="TEST123",
+                verification_token="test-token-123",
+                days_remaining=5
+            )
+        elif email_type == "connected":
+            success = await email_service.send_store_connected_email(
+                user_email=test_email,
+                user_name="مستخدم تجريبي",
+                store_name="متجر تجريبي",
+                products_synced=25
+            )
+        else:
+            raise HTTPException(status_code=400, detail="نوع إيميل غير مدعوم")
+        
+        return {
+            "success": success,
+            "message": f"تم إرسال إيميل {email_type} إلى {test_email}" if success else "فشل في الإرسال",
+            "email_type": email_type,
+            "test_email": test_email
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"خطأ في اختبار الإيميل: {str(e)}")
+
+@router.post("/run-email-tasks")
+async def run_email_tasks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """تشغيل مهام الإيميلات يدوياً (للمطورين)"""
+    try:
+        # التحقق من صلاحيات المطور
+        if current_user.email not in ["alimobarki.ad@gmail.com", "owner@breevo.com"]:
+            raise HTTPException(status_code=403, detail="غير مخول")
+        
+        # تشغيل مهام التذكير
+        await send_pending_reminder_emails(db)
+        
+        # تشغيل مهام التنظيف
+        await cleanup_expired_pending_stores(db)
+        
+        return {
+            "success": True,
+            "message": "تم تشغيل جميع مهام الإيميلات بنجاح"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"خطأ في تشغيل مهام الإيميلات: {str(e)}")
+
+# ===== معالجات الأحداث (Background Tasks) - مُصححة مع نظام الإيميلات =====
 
 async def handle_app_installed(db: Session, merchant_id: str, data: dict):
-    """معالجة تثبيت التطبيق"""
+    """معالجة تثبيت التطبيق - محدث مع نظام الإيميلات"""
     try:
         print(f"🎉 App installed for merchant: {merchant_id}")
         print(f"📄 Installation data: {json.dumps(data, indent=2, ensure_ascii=False)}")
         
-        app_name = data.get("app_name", "Unknown App")
-        installation_date = data.get("installation_date")
-        store_type = data.get("store_type", "production")
+        # استخراج بيانات المتجر من webhook
+        store_name = data.get("store_name") or data.get("name", "متجر غير محدد")
+        store_domain = data.get("store_domain") or data.get("domain", "")
+        store_email = data.get("store_email") or data.get("email", "")
+        store_phone = data.get("store_phone") or data.get("phone", "")
+        store_plan = data.get("store_plan") or data.get("plan", "basic")
+        store_status = data.get("store_status") or data.get("status", "active")
         
-        print(f"✅ App '{app_name}' installed for merchant {merchant_id} on {installation_date}")
+        # التحقق من وجود المتجر في pending_stores
+        existing_pending = db.query(PendingStore).filter(
+            PendingStore.store_id == merchant_id
+        ).first()
+        
+        if existing_pending:
+            # تحديث البيانات الموجودة
+            existing_pending.store_name = store_name
+            existing_pending.store_domain = store_domain
+            existing_pending.store_email = store_email or existing_pending.store_email
+            existing_pending.store_phone = store_phone or existing_pending.store_phone
+            existing_pending.store_plan = store_plan
+            existing_pending.store_status = store_status
+            existing_pending.updated_at = datetime.utcnow()
+            
+            # إعادة تعيين إذا كان منتهي الصلاحية
+            if existing_pending.is_expired:
+                existing_pending.verification_token = str(uuid.uuid4())
+                existing_pending.expires_at = datetime.utcnow() + timedelta(days=7)
+                existing_pending.welcome_email_sent = False
+                existing_pending.reminder_email_sent = False
+            
+            pending_store = existing_pending
+            print(f"✅ Updated existing pending store")
+        else:
+            # إنشاء متجر مؤقت جديد
+            pending_store = PendingStore(
+                store_id=merchant_id,
+                store_name=store_name,
+                store_domain=store_domain,
+                store_email=store_email,
+                store_phone=store_phone,
+                store_plan=store_plan,
+                store_status=store_status,
+                verification_token=str(uuid.uuid4()),
+                expires_at=datetime.utcnow() + timedelta(days=7)
+            )
+            db.add(pending_store)
+            print(f"✅ Created new pending store")
+        
+        db.commit()
+        db.refresh(pending_store)
+        
+        # 🔥 إرسال إيميل ترحيب فوري (إذا توفر إيميل)
+        if store_email and not pending_store.welcome_email_sent:
+            try:
+                print(f"📧 Sending welcome email to: {store_email}")
+                
+                # محاولة الحصول على عدد المنتجات (اختياري)
+                products_count = 0
+                try:
+                    # يمكن إضافة استدعاء API هنا لاحقاً
+                    products_count = data.get("products_count", 0)
+                except:
+                    pass
+                
+                # إرسال الإيميل
+                email_sent = await email_service.send_store_welcome_email(
+                    store_email=store_email,
+                    store_name=store_name,
+                    store_id=merchant_id,
+                    verification_token=pending_store.verification_token,
+                    products_count=products_count
+                )
+                
+                if email_sent:
+                    pending_store.welcome_email_sent = True
+                    pending_store.last_email_sent_at = datetime.utcnow()
+                    pending_store.products_count = products_count
+                    db.commit()
+                    print(f"✅ Welcome email sent successfully")
+                else:
+                    print(f"❌ Failed to send welcome email")
+                    
+            except Exception as email_error:
+                print(f"❌ Error sending welcome email: {str(email_error)}")
+        else:
+            if not store_email:
+                print(f"⚠️ No email found for store {store_name}")
+            elif pending_store.welcome_email_sent:
+                print(f"ℹ️ Welcome email already sent for store {store_name}")
+        
+        print(f"🎉 App installation processed successfully for {store_name}")
         
     except Exception as e:
         print(f"❌ Error handling app installation: {str(e)}")
+        db.rollback()
 
 async def handle_app_store_authorize(db: Session, merchant_id: str, data: dict):
-    """معالجة ترخيص التطبيق"""
+    """معالجة ترخيص التطبيق - محدث"""
     try:
         print(f"🔐 App authorized for merchant: {merchant_id}")
         print(f"📄 Authorization data: {json.dumps(data, indent=2, ensure_ascii=False)}")
         
         access_token = data.get("access_token")
         refresh_token = data.get("refresh_token")
-        expires = data.get("expires")
+        expires_timestamp = data.get("expires")
         scope = data.get("scope")
         
         if access_token:
-            # البحث عن المتجر وتحديث tokens
+            # تحديث في PendingStore أولاً
+            pending_store = db.query(PendingStore).filter(
+                PendingStore.store_id == merchant_id
+            ).first()
+            
+            if pending_store:
+                pending_store.access_token = access_token
+                pending_store.refresh_token = refresh_token
+                if expires_timestamp:
+                    pending_store.token_expires_at = datetime.fromtimestamp(expires_timestamp)
+                pending_store.updated_at = datetime.utcnow()
+                
+                print(f"✅ Updated tokens in pending store: {pending_store.store_name}")
+            
+            # تحديث في SallaStore إذا كان موجوداً (للمتاجر المربوطة مسبقاً)
             store = db.query(SallaStore).filter(
                 SallaStore.store_id == merchant_id
             ).first()
@@ -370,24 +609,36 @@ async def handle_app_store_authorize(db: Session, merchant_id: str, data: dict):
             if store:
                 store.access_token = access_token
                 store.refresh_token = refresh_token
-                if expires:
-                    store.token_expires_at = datetime.fromtimestamp(expires)
+                if expires_timestamp:
+                    store.token_expires_at = datetime.fromtimestamp(expires_timestamp)
                 store.updated_at = datetime.utcnow()
-                db.commit()
-                print(f"✅ Updated tokens for store: {store.store_name}")
-            else:
-                print(f"⚠️ Store not found for merchant: {merchant_id}")
+                
+                print(f"✅ Updated tokens in salla store: {store.store_name}")
+            
+            db.commit()
         
     except Exception as e:
         print(f"❌ Error handling app authorization: {str(e)}")
         db.rollback()
 
 async def handle_app_uninstalled(db: Session, merchant_id: str, data: dict):
-    """معالجة إلغاء تثبيت التطبيق"""
+    """معالجة إلغاء تثبيت التطبيق - محدث"""
     try:
         print(f"😢 App uninstalled for merchant: {merchant_id}")
         
-        # البحث عن المتجر وتعطيله
+        # تعطيل في PendingStore
+        pending_store = db.query(PendingStore).filter(
+            PendingStore.store_id == merchant_id
+        ).first()
+        
+        if pending_store:
+            pending_store.store_status = "uninstalled"
+            pending_store.access_token = None
+            pending_store.refresh_token = None
+            pending_store.updated_at = datetime.utcnow()
+            print(f"✅ Pending store marked as uninstalled")
+        
+        # تعطيل في SallaStore
         store = db.query(SallaStore).filter(
             SallaStore.store_id == merchant_id
         ).first()
@@ -397,10 +648,9 @@ async def handle_app_uninstalled(db: Session, merchant_id: str, data: dict):
             store.access_token = None
             store.refresh_token = None
             store.updated_at = datetime.utcnow()
-            db.commit()
-            print(f"✅ Store marked as uninstalled: {store.store_name}")
-        else:
-            print(f"⚠️ Store not found for merchant: {merchant_id}")
+            print(f"✅ Salla store marked as uninstalled: {store.store_name}")
+        
+        db.commit()
         
     except Exception as e:
         print(f"❌ Error handling app uninstall: {str(e)}")
@@ -634,6 +884,97 @@ async def handle_customer_updated(db: Session, merchant_id: str, customer_data: 
         
     except Exception as e:
         print(f"❌ Error handling customer update: {str(e)}")
+
+# ===== مهام مجدولة للإيميلات =====
+
+async def send_pending_reminder_emails(db: Session):
+    """مهمة مجدولة لإرسال إيميلات التذكير للمتاجر المعلقة"""
+    try:
+        print("🔄 Checking for pending stores needing reminder emails...")
+        
+        # العثور على المتاجر التي تحتاج تذكير
+        pending_stores = db.query(PendingStore).filter(
+            PendingStore.is_claimed == False,
+            PendingStore.reminder_email_sent == False,
+            PendingStore.welcome_email_sent == True,
+            PendingStore.store_email.isnot(None),
+            PendingStore.expires_at > datetime.utcnow()
+        ).all()
+        
+        reminder_count = 0
+        
+        for store in pending_stores:
+            if store.should_send_reminder:
+                try:
+                    print(f"📧 Sending reminder email to: {store.store_email}")
+                    
+                    email_sent = await email_service.send_store_reminder_email(
+                        store_email=store.store_email,
+                        store_name=store.store_name,
+                        store_id=store.store_id,
+                        verification_token=store.verification_token,
+                        days_remaining=store.days_remaining
+                    )
+                    
+                    if email_sent:
+                        store.reminder_email_sent = True
+                        store.last_email_sent_at = datetime.utcnow()
+                        reminder_count += 1
+                        print(f"✅ Reminder email sent to {store.store_name}")
+                    else:
+                        print(f"❌ Failed to send reminder email to {store.store_name}")
+                        
+                except Exception as email_error:
+                    print(f"❌ Error sending reminder to {store.store_name}: {str(email_error)}")
+                    continue
+        
+        if reminder_count > 0:
+            db.commit()
+            print(f"✅ Sent {reminder_count} reminder emails")
+        else:
+            print("ℹ️ No reminder emails needed at this time")
+        
+    except Exception as e:
+        print(f"❌ Error in reminder email task: {str(e)}")
+        db.rollback()
+
+async def cleanup_expired_pending_stores(db: Session):
+    """تنظيف المتاجر المؤقتة المنتهية الصلاحية"""
+    try:
+        print("🧹 Cleaning up expired pending stores...")
+        
+        # حذف المتاجر المنتهية الصلاحية والغير مربوطة
+        expired_stores = db.query(PendingStore).filter(
+            PendingStore.is_claimed == False,
+            PendingStore.expires_at < datetime.utcnow() - timedelta(days=1)  # انتهت أمس
+        ).all()
+        
+        deleted_count = 0
+        for store in expired_stores:
+            print(f"🗑️ Deleting expired pending store: {store.store_name}")
+            db.delete(store)
+            deleted_count += 1
+        
+        if deleted_count > 0:
+            db.commit()
+            print(f"✅ Cleaned up {deleted_count} expired pending stores")
+        else:
+            print("ℹ️ No expired stores to clean up")
+            
+    except Exception as e:
+        print(f"❌ Error in cleanup task: {str(e)}")
+        db.rollback()
+
+async def schedule_reminder_task(merchant_id: str, delay_hours: int = 25):
+    """جدولة مهمة تذكير مؤجلة"""
+    await asyncio.sleep(delay_hours * 3600)  # انتظار المدة المحددة
+    
+    try:
+        from app.database import get_db
+        db = next(get_db())
+        await send_pending_reminder_emails(db)
+    except Exception as e:
+        print(f"❌ Error in scheduled reminder task: {str(e)}")
 
 async def sync_products_task(db: Session, store: SallaStore):
     """مهمة مزامنة المنتجات (تعمل في الخلفية)"""
