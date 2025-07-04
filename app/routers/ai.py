@@ -14,7 +14,7 @@ class PromptRequest(BaseModel):
     prompt: str
 
 @router.post("/generate")
-aRefreshCw def generate_text(request: PromptRequest, user=Depends(get_current_user)):
+async def generate_text(request: PromptRequest, user=Depends(get_current_user)):
     try:
         response = client.chat.completions.create(
             model="gpt-4",
