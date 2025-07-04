@@ -111,7 +111,7 @@ async def handle_oauth_callback(
         try:
             await email_service.send_store_connected_email(
                 user_email=current_user.email,
-                user_name=current_user.name or current_user.email,
+                user_name=current_user.full_name or current_user.email,
                 store_name=store.store_name,
                 products_synced=0  # سيتم تحديثه بعد المزامنة
             )
@@ -391,18 +391,17 @@ async def get_pending_stores(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"خطأ في جلب المتاجر المؤقتة: {str(e)}")
 
+# ✅ دالة اختبار الإيميل المُصححة - بدون مصادقة للاختبار
 @router.post("/test-email")
 async def test_email_system(
     email_type: str,
     test_email: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
+    # تم حذف current_user للاختبار المؤقت
 ):
-    """اختبار نظام الإيميلات (للمطورين)"""
+    """اختبار نظام الإيميلات (بدون مصادقة للاختبار)"""
     try:
-        # التحقق من صلاحيات المطور
-        if current_user.email not in ["alimobarki.ad@gmail.com", "owner@breevo.com"]:
-            raise HTTPException(status_code=403, detail="غير مخول")
+        # تم حذف التحقق من المطور للاختبار
         
         success = False
         
