@@ -1,8 +1,10 @@
-
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 import uuid
 import os
+import json
+import hmac
+import hashlib
 from datetime import datetime, timedelta
 
 from app.database import get_db
@@ -120,6 +122,75 @@ async def handle_oauth_callback(
         print(f"❌ خطأ عام في callback: {str(e)}")
         raise HTTPException(status_code=500, detail=f"خطأ في ربط المتجر: {str(e)}")
 
+# 🔥 NEW: Webhook Endpoint لاستقبال تنبيهات سلة
+@router.post("/webhook")
+async def handle_salla_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """استقبال ومعالجة webhooks من سلة"""
+    try:
+        # قراءة البيانات
+        payload = await request.body()
+        headers = request.headers
+        
+        # التحقق من التوقيع (اختياري للحماية)
+        # signature = headers.get("x-salla-signature")
+        # if signature:
+        #     if not verify_webhook_signature(payload, signature):
+        #         raise HTTPException(status_code=401, detail="Invalid signature")
+        
+        # تحويل البيانات لـ JSON
+        webhook_data = json.loads(payload.decode('utf-8'))
+        
+        print(f"📡 Webhook received: {webhook_data.get('event')}")
+        print(f"📄 Data: {json.dumps(webhook_data, indent=2, ensure_ascii=False)}")
+        
+        # استخراج نوع الحدث والبيانات
+        event = webhook_data.get("event")
+        data = webhook_data.get("data", {})
+        
+        # معالجة الأحداث المختلفة
+        if event == "app.installed":
+            background_tasks.add_task(handle_app_installed, db, data)
+            
+        elif event == "app.uninstalled":
+            background_tasks.add_task(handle_app_uninstalled, db, data)
+            
+        elif event == "product.created":
+            background_tasks.add_task(handle_product_created, db, data)
+            
+        elif event == "product.updated":
+            background_tasks.add_task(handle_product_updated, db, data)
+            
+        elif event == "product.deleted":
+            background_tasks.add_task(handle_product_deleted, db, data)
+            
+        elif event == "order.created":
+            background_tasks.add_task(handle_order_created, db, data)
+            
+        elif event == "customer.created":
+            background_tasks.add_task(handle_customer_created, db, data)
+            
+        else:
+            print(f"⚠️ Unhandled webhook event: {event}")
+        
+        # استجابة سريعة لسلة
+        return {
+            "success": True,
+            "message": f"Webhook {event} received successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON decode error: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        
+    except Exception as e:
+        print(f"❌ Webhook processing error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Webhook processing failed: {str(e)}")
+
 @router.get("/stores")
 async def get_connected_stores(
     db: Session = Depends(get_db),
@@ -236,6 +307,198 @@ async def get_store_products(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"خطأ في جلب المنتجات: {str(e)}")
 
+# ===== معالجات الأحداث (Background Tasks) =====
+
+async def handle_app_installed(db: Session, data: dict):
+    """معالجة تثبيت التطبيق"""
+    try:
+        print(f"🎉 App installed for merchant: {data.get('merchant', {}).get('id')}")
+        
+        merchant = data.get("merchant", {})
+        store = data.get("store", {})
+        
+        # البحث عن المستخدم أو إنشاؤه
+        # هنا قد نحتاج منطق أكثر تعقيداً لربط التاجر بالمستخدم
+        
+        print(f"✅ App installation processed for: {merchant.get('name')}")
+        
+    except Exception as e:
+        print(f"❌ Error handling app installation: {str(e)}")
+
+async def handle_app_uninstalled(db: Session, data: dict):
+    """معالجة إلغاء تثبيت التطبيق"""
+    try:
+        print(f"😢 App uninstalled for merchant: {data.get('merchant', {}).get('id')}")
+        
+        merchant_id = str(data.get("merchant", {}).get("id"))
+        
+        # البحث عن المتجر وتعطيله
+        store = db.query(SallaStore).filter(
+            SallaStore.store_id == merchant_id
+        ).first()
+        
+        if store:
+            store.store_status = "uninstalled"
+            store.access_token = None
+            store.refresh_token = None
+            store.updated_at = datetime.utcnow()
+            db.commit()
+            print(f"✅ Store marked as uninstalled: {store.store_name}")
+        
+    except Exception as e:
+        print(f"❌ Error handling app uninstall: {str(e)}")
+        db.rollback()
+
+async def handle_product_created(db: Session, data: dict):
+    """معالجة إنشاء منتج جديد"""
+    try:
+        print(f"📦 New product created: {data.get('product', {}).get('id')}")
+        
+        merchant_id = str(data.get("merchant", {}).get("id"))
+        product_data = data.get("product", {})
+        
+        # البحث عن المتجر
+        store = db.query(SallaStore).filter(
+            SallaStore.store_id == merchant_id
+        ).first()
+        
+        if not store:
+            print(f"❌ Store not found for merchant: {merchant_id}")
+            return
+        
+        # إنشاء المنتج الجديد
+        new_product = SallaProduct(
+            store_id=store.id,
+            salla_product_id=str(product_data.get("id")),
+            name=product_data.get("name", ""),
+            description=product_data.get("description", ""),
+            sku=product_data.get("sku", ""),
+            url_slug=product_data.get("url", ""),
+            price_amount=str(product_data.get("price", {}).get("amount", 0)),
+            price_currency=product_data.get("price", {}).get("currency", "SAR"),
+            category_id=str(product_data.get("category", {}).get("id", "")),
+            category_name=product_data.get("category", {}).get("name", ""),
+            images=product_data.get("images", []),
+            seo_title=product_data.get("metadata", {}).get("title", ""),
+            seo_description=product_data.get("metadata", {}).get("description", ""),
+            status=product_data.get("status", "sale"),
+            last_synced_at=datetime.utcnow(),
+            needs_update=False
+        )
+        
+        db.add(new_product)
+        db.commit()
+        print(f"✅ Product created: {product_data.get('name')}")
+        
+    except Exception as e:
+        print(f"❌ Error handling product creation: {str(e)}")
+        db.rollback()
+
+async def handle_product_updated(db: Session, data: dict):
+    """معالجة تحديث منتج"""
+    try:
+        print(f"✏️ Product updated: {data.get('product', {}).get('id')}")
+        
+        merchant_id = str(data.get("merchant", {}).get("id"))
+        product_data = data.get("product", {})
+        product_id = str(product_data.get("id"))
+        
+        # البحث عن المتجر
+        store = db.query(SallaStore).filter(
+            SallaStore.store_id == merchant_id
+        ).first()
+        
+        if not store:
+            print(f"❌ Store not found for merchant: {merchant_id}")
+            return
+        
+        # البحث عن المنتج وتحديثه
+        product = db.query(SallaProduct).filter(
+            SallaProduct.store_id == store.id,
+            SallaProduct.salla_product_id == product_id
+        ).first()
+        
+        if product:
+            # تحديث المنتج
+            product.name = product_data.get("name", product.name)
+            product.description = product_data.get("description", product.description)
+            product.sku = product_data.get("sku", product.sku)
+            product.price_amount = str(product_data.get("price", {}).get("amount", product.price_amount))
+            product.price_currency = product_data.get("price", {}).get("currency", product.price_currency)
+            product.status = product_data.get("status", product.status)
+            product.images = product_data.get("images", product.images)
+            product.last_synced_at = datetime.utcnow()
+            
+            db.commit()
+            print(f"✅ Product updated: {product.name}")
+        else:
+            print(f"⚠️ Product not found in database: {product_id}")
+        
+    except Exception as e:
+        print(f"❌ Error handling product update: {str(e)}")
+        db.rollback()
+
+async def handle_product_deleted(db: Session, data: dict):
+    """معالجة حذف منتج"""
+    try:
+        print(f"🗑️ Product deleted: {data.get('product', {}).get('id')}")
+        
+        merchant_id = str(data.get("merchant", {}).get("id"))
+        product_data = data.get("product", {})
+        product_id = str(product_data.get("id"))
+        
+        # البحث عن المتجر
+        store = db.query(SallaStore).filter(
+            SallaStore.store_id == merchant_id
+        ).first()
+        
+        if not store:
+            print(f"❌ Store not found for merchant: {merchant_id}")
+            return
+        
+        # البحث عن المنتج وحذفه أو تمييزه كمحذوف
+        product = db.query(SallaProduct).filter(
+            SallaProduct.store_id == store.id,
+            SallaProduct.salla_product_id == product_id
+        ).first()
+        
+        if product:
+            # يمكن حذفه فعلياً أو تمييزه كمحذوف
+            product.status = "deleted"
+            product.last_synced_at = datetime.utcnow()
+            
+            db.commit()
+            print(f"✅ Product marked as deleted: {product.name}")
+        
+    except Exception as e:
+        print(f"❌ Error handling product deletion: {str(e)}")
+        db.rollback()
+
+async def handle_order_created(db: Session, data: dict):
+    """معالجة إنشاء طلب جديد"""
+    try:
+        print(f"🛒 New order created: {data.get('order', {}).get('id')}")
+        
+        # يمكن حفظ إحصائيات الطلبات هنا
+        # أو إرسال تنبيهات للتاجر
+        
+        print(f"✅ Order processed successfully")
+        
+    except Exception as e:
+        print(f"❌ Error handling order creation: {str(e)}")
+
+async def handle_customer_created(db: Session, data: dict):
+    """معالجة إنشاء عميل جديد"""
+    try:
+        print(f"👤 New customer created: {data.get('customer', {}).get('id')}")
+        
+        # يمكن حفظ إحصائيات العملاء هنا
+        
+        print(f"✅ Customer processed successfully")
+        
+    except Exception as e:
+        print(f"❌ Error handling customer creation: {str(e)}")
+
 async def sync_products_task(db: Session, store: SallaStore):
     """مهمة مزامنة المنتجات (تعمل في الخلفية)"""
     try:
@@ -319,3 +582,19 @@ async def sync_products_task(db: Session, store: SallaStore):
     except Exception as e:
         print(f"❌ خطأ في مزامنة المنتجات: {str(e)}")
         db.rollback()
+
+def verify_webhook_signature(payload: bytes, signature: str) -> bool:
+    """التحقق من صحة webhook signature (اختياري)"""
+    try:
+        webhook_secret = os.getenv("SALLA_WEBHOOK_SECRET", "your-secret-key")
+        
+        calculated_signature = hmac.new(
+            webhook_secret.encode('utf-8'),
+            payload,
+            hashlib.sha256
+        ).hexdigest()
+        
+        return hmac.compare_digest(signature, calculated_signature)
+    except Exception as e:
+        print(f"❌ Error verifying webhook signature: {str(e)}")
+        return False
