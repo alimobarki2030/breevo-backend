@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models.user import User
-from app.models.salla import SallaStore, SallaProduct
 from app.services.salla_api import SallaAPIService
 from app.routers.auth import get_current_user
 
