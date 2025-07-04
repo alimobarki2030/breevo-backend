@@ -6,7 +6,6 @@ import json
 import hmac
 import hashlib
 from datetime import datetime, timedelta
-import httpx
 
 from app.database import get_db
 from app.models.user import User
@@ -233,15 +232,13 @@ async def get_connected_stores(
             {
                 "id": store.id,
                 "store_id": store.store_id,
-                "merchant_id": store.store_id,  # إضافة merchant_id للتوافق
                 "name": store.store_name,
                 "domain": store.store_domain,
                 "plan": store.store_plan,
                 "status": store.store_status,
                 "connected_at": store.created_at,
-                "last_synced": store.last_sync_at,
-                "products_count": len(store.products) if store.products else 0,
-                "webhook_status": "active"
+                "last_sync": store.last_sync_at,
+                "products_count": len(store.products) if store.products else 0
             }
             for store in stores
         ]
@@ -354,7 +351,7 @@ async def handle_app_installed(db: Session, merchant_id: str, data: dict):
         print(f"❌ Error handling app installation: {str(e)}")
 
 async def handle_app_store_authorize(db: Session, merchant_id: str, data: dict):
-    """🔥 معالجة ترخيص التطبيق - محدث ومُصحح"""
+    """معالجة ترخيص التطبيق"""
     try:
         print(f"🔐 App authorized for merchant: {merchant_id}")
         print(f"📄 Authorization data: {json.dumps(data, indent=2, ensure_ascii=False)}")
@@ -363,215 +360,26 @@ async def handle_app_store_authorize(db: Session, merchant_id: str, data: dict):
         refresh_token = data.get("refresh_token")
         expires = data.get("expires")
         scope = data.get("scope")
-        app_name = data.get("app_name", "SEO Ray")
-        app_description = data.get("app_description", "")
         
-        if not access_token:
-            print("❌ No access token in authorization data")
-            return
-        
-        # 🔍 جلب معلومات المتجر من سلة API
-        store_info = await fetch_store_info_from_salla(access_token, merchant_id)
-        
-        # 💾 البحث عن المتجر الموجود أو إنشاء جديد
-        existing_store = db.query(SallaStore).filter(
-            SallaStore.store_id == merchant_id
-        ).first()
-        
-        if existing_store:
-            # تحديث المتجر الموجود
-            existing_store.access_token = access_token
-            existing_store.refresh_token = refresh_token
-            if expires:
-                existing_store.token_expires_at = datetime.fromtimestamp(expires)
-            existing_store.store_name = store_info.get('name', existing_store.store_name)
-            existing_store.store_domain = store_info.get('domain', existing_store.store_domain)
-            existing_store.store_status = "active"
-            existing_store.updated_at = datetime.utcnow()
-            
-            print(f"✅ Updated existing store: {existing_store.store_name}")
-        else:
-            # إنشاء متجر جديد (بدون user_id في البداية)
-            new_store = SallaStore(
-                user_id=None,  # سيتم ربطه لاحقاً
-                store_id=merchant_id,
-                store_name=store_info.get('name', f'Store {merchant_id}'),
-                store_domain=store_info.get('domain', ''),
-                store_plan=store_info.get('plan', 'unknown'),
-                store_status="active",
-                access_token=access_token,
-                refresh_token=refresh_token,
-                token_expires_at=datetime.fromtimestamp(expires) if expires else None,
-                webhook_secret=str(uuid.uuid4()),
-                auto_sync_enabled=True,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            
-            db.add(new_store)
-            print(f"✅ Created new store: {new_store.store_name}")
-        
-        db.commit()
-        
-        # 🔄 بدء التزامن الأولي للمنتجات
-        if existing_store:
-            await sync_products_initial(db, existing_store, access_token)
-        else:
-            # إعادة جلب المتجر المحفوظ
-            saved_store = db.query(SallaStore).filter(
+        if access_token:
+            # البحث عن المتجر وتحديث tokens
+            store = db.query(SallaStore).filter(
                 SallaStore.store_id == merchant_id
             ).first()
-            if saved_store:
-                await sync_products_initial(db, saved_store, access_token)
+            
+            if store:
+                store.access_token = access_token
+                store.refresh_token = refresh_token
+                if expires:
+                    store.token_expires_at = datetime.fromtimestamp(expires)
+                store.updated_at = datetime.utcnow()
+                db.commit()
+                print(f"✅ Updated tokens for store: {store.store_name}")
+            else:
+                print(f"⚠️ Store not found for merchant: {merchant_id}")
         
     except Exception as e:
         print(f"❌ Error handling app authorization: {str(e)}")
-        db.rollback()
-
-async def fetch_store_info_from_salla(access_token: str, merchant_id: str) -> dict:
-    """جلب معلومات المتجر من سلة API"""
-    try:
-        headers = {
-            'Authorization': f'Bearer {access_token}',
-            'Accept': 'application/json'
-        }
-        
-        async with httpx.AsyncClient() as client:
-            # جرب endpoint معلومات المتجر
-            response = await client.get(
-                'https://api.salla.dev/admin/v2/store', 
-                headers=headers,
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                store_data = result.get('data', {})
-                
-                print(f"✅ Fetched store info from Salla: {store_data.get('name')}")
-                return {
-                    'name': store_data.get('name', f'Salla Store {merchant_id}'),
-                    'domain': store_data.get('domain', f'https://store-{merchant_id}.salla.sa'),
-                    'plan': store_data.get('plan', 'unknown'),
-                    'status': store_data.get('status', 'active'),
-                    'id': merchant_id
-                }
-            else:
-                print(f"❌ Failed to fetch store info from Salla: {response.status_code}")
-                return default_store_info(merchant_id)
-                
-    except Exception as e:
-        print(f"❌ Error fetching store info from Salla: {e}")
-        return default_store_info(merchant_id)
-
-def default_store_info(merchant_id: str) -> dict:
-    """معلومات افتراضية للمتجر"""
-    return {
-        'name': f'Salla Store {merchant_id}',
-        'domain': f'https://store-{merchant_id}.salla.sa',
-        'plan': 'unknown',
-        'status': 'active',
-        'id': merchant_id
-    }
-
-async def sync_products_initial(db: Session, store: SallaStore, access_token: str):
-    """تزامن أولي للمنتجات"""
-    try:
-        print(f"🔄 Starting initial product sync for store: {store.store_name}")
-        
-        headers = {
-            'Authorization': f'Bearer {access_token}',
-            'Accept': 'application/json'
-        }
-        
-        # جلب الصفحة الأولى من المنتجات
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                'https://api.salla.dev/admin/v2/products?per_page=50', 
-                headers=headers,
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                products = result.get('data', [])
-                
-                # حفظ المنتجات
-                saved_count = 0
-                for product in products:
-                    try:
-                        await save_product_to_database(db, product, store.id)
-                        saved_count += 1
-                    except Exception as product_error:
-                        print(f"❌ Error saving product {product.get('id')}: {product_error}")
-                        continue
-                
-                # تحديث وقت آخر تزامن
-                store.last_sync_at = datetime.utcnow()
-                db.commit()
-                
-                print(f"✅ Initial sync completed: {saved_count} products synced for {store.store_name}")
-            else:
-                print(f"❌ Failed to sync products: {response.status_code}")
-                
-    except Exception as e:
-        print(f"❌ Error in initial product sync: {e}")
-
-async def save_product_to_database(db: Session, product_data: dict, store_id: int):
-    """حفظ منتج في قاعدة البيانات"""
-    try:
-        # معالجة السعر
-        price_data = product_data.get("price", {})
-        price_amount = str(price_data.get("amount", 0)) if price_data else "0"
-        price_currency = price_data.get("currency", "SAR") if price_data else "SAR"
-        
-        # معالجة التصنيف
-        categories = product_data.get("categories", [])
-        category_name = categories[0].get("name", "") if categories else ""
-        category_id = str(categories[0].get("id", "")) if categories else ""
-        
-        # معالجة الصور
-        images = product_data.get("images", [])
-        
-        # التحقق من وجود المنتج
-        existing_product = db.query(SallaProduct).filter(
-            SallaProduct.store_id == store_id,
-            SallaProduct.salla_product_id == str(product_data.get("id"))
-        ).first()
-        
-        product_info = {
-            "store_id": store_id,
-            "salla_product_id": str(product_data.get("id")),
-            "name": product_data.get("name", ""),
-            "description": product_data.get("description", ""),
-            "sku": product_data.get("sku", ""),
-            "url_slug": product_data.get("url", ""),
-            "price_amount": price_amount,
-            "price_currency": price_currency,
-            "category_id": category_id,
-            "category_name": category_name,
-            "images": images,
-            "seo_title": product_data.get("seo_title", ""),
-            "seo_description": product_data.get("seo_description", ""),
-            "status": product_data.get("status", "sale"),
-            "last_synced_at": datetime.utcnow(),
-            "needs_update": False
-        }
-        
-        if existing_product:
-            # تحديث المنتج الموجود
-            for key, value in product_info.items():
-                if key != "store_id":
-                    setattr(existing_product, key, value)
-        else:
-            # إنشاء منتج جديد
-            new_product = SallaProduct(**product_info)
-            db.add(new_product)
-        
-        db.commit()
-        
-    except Exception as e:
-        print(f"❌ Failed to save product: {e}")
         db.rollback()
 
 async def handle_app_uninstalled(db: Session, merchant_id: str, data: dict):
@@ -619,8 +427,46 @@ async def handle_product_created(db: Session, merchant_id: str, product_data: di
         
         print(f"✅ Found store: {store.store_name}")
         
-        # حفظ المنتج الجديد
-        await save_product_to_database(db, product_data, store.id)
+        # معالجة السعر
+        price_data = product_data.get("price", {})
+        price_amount = str(price_data.get("amount", 0)) if price_data else "0"
+        price_currency = price_data.get("currency", "SAR") if price_data else "SAR"
+        
+        # معالجة التصنيف
+        category_data = product_data.get("category", {})
+        category_id = str(category_data.get("id", "")) if category_data else ""
+        category_name = category_data.get("name", "") if category_data else ""
+        
+        # معالجة الصور
+        images = product_data.get("images", [])
+        
+        # معالجة SEO metadata
+        metadata = product_data.get("metadata", {})
+        seo_title = metadata.get("title", "") if metadata else ""
+        seo_description = metadata.get("description", "") if metadata else ""
+        
+        # إنشاء المنتج الجديد
+        new_product = SallaProduct(
+            store_id=store.id,
+            salla_product_id=str(product_data.get("id", "")),
+            name=product_data.get("name", ""),
+            description=product_data.get("description", ""),
+            sku=product_data.get("sku", ""),
+            url_slug=product_data.get("url", ""),
+            price_amount=price_amount,
+            price_currency=price_currency,
+            category_id=category_id,
+            category_name=category_name,
+            images=images,
+            seo_title=seo_title,
+            seo_description=seo_description,
+            status=product_data.get("status", "sale"),
+            last_synced_at=datetime.utcnow(),
+            needs_update=False
+        )
+        
+        db.add(new_product)
+        db.commit()
         print(f"✅ Product created successfully: {product_data.get('name')}")
         
     except Exception as e:
@@ -641,11 +487,60 @@ async def handle_product_updated(db: Session, merchant_id: str, product_data: di
         
         if not store:
             print(f"❌ Store not found for merchant: {merchant_id}")
+            # طباعة المتاجر المتاحة للتشخيص
+            all_stores = db.query(SallaStore).all()
+            print(f"🏪 Available stores: {[(s.id, s.store_id, s.store_name) for s in all_stores]}")
             return
         
-        # حفظ أو تحديث المنتج
-        await save_product_to_database(db, product_data, store.id)
-        print(f"✅ Product updated successfully: {product_data.get('name')}")
+        print(f"✅ Found store: {store.store_name}")
+        
+        product_id = str(product_data.get("id", ""))
+        
+        # البحث عن المنتج وتحديثه
+        product = db.query(SallaProduct).filter(
+            SallaProduct.store_id == store.id,
+            SallaProduct.salla_product_id == product_id
+        ).first()
+        
+        if product:
+            # تحديث المنتج الموجود
+            product.name = product_data.get("name", product.name)
+            product.description = product_data.get("description", product.description)
+            product.sku = product_data.get("sku", product.sku)
+            product.url_slug = product_data.get("url", product.url_slug)
+            
+            # تحديث السعر
+            price_data = product_data.get("price", {})
+            if price_data:
+                product.price_amount = str(price_data.get("amount", product.price_amount))
+                product.price_currency = price_data.get("currency", product.price_currency)
+            
+            # تحديث التصنيف
+            category_data = product_data.get("category", {})
+            if category_data:
+                product.category_id = str(category_data.get("id", product.category_id))
+                product.category_name = category_data.get("name", product.category_name)
+            
+            # تحديث الصور
+            if "images" in product_data:
+                product.images = product_data["images"]
+            
+            # تحديث SEO
+            metadata = product_data.get("metadata", {})
+            if metadata:
+                product.seo_title = metadata.get("title", product.seo_title)
+                product.seo_description = metadata.get("description", product.seo_description)
+            
+            product.status = product_data.get("status", product.status)
+            product.last_synced_at = datetime.utcnow()
+            
+            db.commit()
+            print(f"✅ Product updated successfully: {product.name}")
+        else:
+            print(f"⚠️ Product not found in database: {product_id}")
+            print(f"🔄 Creating new product from update event")
+            # إنشاء المنتج إذا لم يكن موجوداً
+            await handle_product_created(db, merchant_id, product_data)
         
     except Exception as e:
         print(f"❌ Error handling product update: {str(e)}")
@@ -675,7 +570,7 @@ async def handle_product_deleted(db: Session, merchant_id: str, product_data: di
         ).first()
         
         if product:
-            # تمييزه كمحذوف
+            # يمكن حذفه فعلياً أو تمييزه كمحذوف
             product.status = "deleted"
             product.last_synced_at = datetime.utcnow()
             
@@ -764,7 +659,46 @@ async def sync_products_task(db: Session, store: SallaStore):
             
             for product_data in products_data["data"]:
                 try:
-                    await save_product_to_database(db, product_data, store.id)
+                    # البحث عن المنتج الموجود
+                    existing_product = db.query(SallaProduct).filter(
+                        SallaProduct.store_id == store.id,
+                        SallaProduct.salla_product_id == str(product_data["id"])
+                    ).first()
+                    
+                    # إعداد بيانات المنتج
+                    price_data = product_data.get("price", {})
+                    category_data = product_data.get("category", {})
+                    metadata = product_data.get("metadata", {})
+                    
+                    product_info = {
+                        "store_id": store.id,
+                        "salla_product_id": str(product_data["id"]),
+                        "name": product_data.get("name", ""),
+                        "description": product_data.get("description", ""),
+                        "sku": product_data.get("sku", ""),
+                        "url_slug": product_data.get("url", ""),
+                        "price_amount": str(price_data.get("amount", 0)) if price_data else "0",
+                        "price_currency": price_data.get("currency", "SAR") if price_data else "SAR",
+                        "category_id": str(category_data.get("id", "")) if category_data else "",
+                        "category_name": category_data.get("name", "") if category_data else "",
+                        "images": product_data.get("images", []),
+                        "seo_title": metadata.get("title", "") if metadata else "",
+                        "seo_description": metadata.get("description", "") if metadata else "",
+                        "status": product_data.get("status", "sale"),
+                        "last_synced_at": datetime.utcnow(),
+                        "needs_update": False
+                    }
+                    
+                    if existing_product:
+                        # تحديث المنتج الموجود
+                        for key, value in product_info.items():
+                            if key != "store_id":  # لا نحدث store_id
+                                setattr(existing_product, key, value)
+                    else:
+                        # إنشاء منتج جديد
+                        new_product = SallaProduct(**product_info)
+                        db.add(new_product)
+                    
                     total_synced += 1
                     
                 except Exception as product_error:
