@@ -9,6 +9,9 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
 
+# ✅ إضافة pydantic للتعامل مع البيانات
+from pydantic import BaseModel
+
 from app.database import get_db
 from app.models.user import User
 from app.models.salla import SallaStore, SallaProduct
@@ -16,6 +19,13 @@ from app.models.pending_store import PendingStore
 from app.services.salla_api import SallaAPIService
 from app.services.email_service import email_service
 from app.routers.auth import get_current_user
+
+# ✅ نموذج البيانات للاختبار
+class EmailTestRequest(BaseModel):
+    email_type: str  # welcome, reminder, connected
+    test_email: str
+    store_name: str = "متجر تجريبي"
+    store_id: str = "TEST123"
 
 # إنشاء router جديد لسلة
 router = APIRouter(prefix="/api/salla", tags=["salla"])
@@ -391,41 +401,45 @@ async def get_pending_stores(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"خطأ في جلب المتاجر المؤقتة: {str(e)}")
 
-# ✅ دالة اختبار الإيميل المُصححة - بدون مصادقة للاختبار
+# ✅ endpoint اختبار الإيميل المُصحح
 @router.post("/test-email")
 async def test_email_system(
-    email_type: str,
-    test_email: str,
+    request: EmailTestRequest,
     db: Session = Depends(get_db)
-    # تم حذف current_user للاختبار المؤقت
 ):
-    """اختبار نظام الإيميلات (بدون مصادقة للاختبار)"""
+    """اختبار نظام الإيميلات - مُصحح"""
     try:
-        # تم حذف التحقق من المطور للاختبار
+        print(f"🧪 Testing email system...")
+        print(f"📧 Email type: {request.email_type}")
+        print(f"📧 Test email: {request.test_email}")
+        
+        # اختبار الاتصال أولاً
+        connection_test = await email_service.test_connection()
+        print(f"🔗 Connection test: {'✅ Success' if connection_test else '❌ Failed'}")
         
         success = False
         
-        if email_type == "welcome":
+        if request.email_type == "welcome":
             success = await email_service.send_store_welcome_email(
-                store_email=test_email,
-                store_name="متجر تجريبي",
-                store_id="TEST123",
+                store_email=request.test_email,
+                store_name=request.store_name,
+                store_id=request.store_id,
                 verification_token="test-token-123",
                 products_count=25
             )
-        elif email_type == "reminder":
+        elif request.email_type == "reminder":
             success = await email_service.send_store_reminder_email(
-                store_email=test_email,
-                store_name="متجر تجريبي",
-                store_id="TEST123",
+                store_email=request.test_email,
+                store_name=request.store_name,
+                store_id=request.store_id,
                 verification_token="test-token-123",
                 days_remaining=5
             )
-        elif email_type == "connected":
+        elif request.email_type == "connected":
             success = await email_service.send_store_connected_email(
-                user_email=test_email,
+                user_email=request.test_email,
                 user_name="مستخدم تجريبي",
-                store_name="متجر تجريبي",
+                store_name=request.store_name,
                 products_synced=25
             )
         else:
@@ -433,9 +447,10 @@ async def test_email_system(
         
         return {
             "success": success,
-            "message": f"تم إرسال إيميل {email_type} إلى {test_email}" if success else "فشل في الإرسال",
-            "email_type": email_type,
-            "test_email": test_email
+            "message": f"تم إرسال إيميل {request.email_type} إلى {request.test_email}" if success else "فشل في الإرسال",
+            "email_type": request.email_type,
+            "test_email": request.test_email,
+            "connection_test": connection_test
         }
         
     except HTTPException:
