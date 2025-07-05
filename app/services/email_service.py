@@ -1,6 +1,7 @@
 # app/services/email_service.py
 import smtplib
 import ssl
+import uuid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
@@ -9,31 +10,25 @@ import aiosmtplib
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 import logging
-import httpx
 from jinja2 import Template
-import json
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 class ZohoEmailService:
-    """خدمة الإيميلات باستخدام Zoho TransMail - مُصححة بالكامل"""
+    """خدمة الإيميلات باستخدام Zoho SMTP للإنتاج"""
     
     def __init__(self):
-        # إعدادات Zoho SMTP المُصححة
+        # إعدادات Zoho SMTP
         self.smtp_server = "smtp.zoho.com"
         self.username = os.getenv("ZOHO_EMAIL_USERNAME")
         self.password = os.getenv("ZOHO_EMAIL_PASSWORD")
         
-        # إعدادات Zoho API (للمميزات المتقدمة)
-        self.api_key = os.getenv("ZOHO_API_KEY")
-        self.api_url = "https://transmail.zoho.com/v1/email"
-        
-        # إعدادات عامة مُصححة
+        # إعدادات عامة
         self.from_email = os.getenv("FROM_EMAIL", self.username)
-        self.from_name = os.getenv("FROM_NAME", "فريق تحسين السيو")
-        self.frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-        self.support_email = os.getenv("SUPPORT_EMAIL", "support@yoursite.com")
+        self.from_name = os.getenv("FROM_NAME", "SEO Raysa Team")
+        self.frontend_url = os.getenv("FRONTEND_URL", "https://www.seoraysa.com")
+        self.support_email = os.getenv("SUPPORT_EMAIL", "seo@seoraysa.com")
         
         # مجلد القوالب
         self.templates_dir = Path(__file__).parent.parent / "templates" / "emails"
@@ -41,35 +36,10 @@ class ZohoEmailService:
         
         # التحقق من الإعدادات
         if not self.username or not self.password:
-            logger.warning("⚠️ إعدادات Zoho غير مكتملة - سيعمل في وضع الاختبار")
-            self.test_mode = True
-        else:
-            self.test_mode = False
-            logger.info("✅ تم تهيئة Zoho Email Service بنجاح")
+            logger.error("Zoho email credentials not configured")
+            raise ValueError("Zoho email credentials are required")
             
-        # التحقق من صحة عنوان الإيميل
-        self._validate_email_config()
-
-    def _validate_email_config(self):
-        """التحقق من صحة إعدادات الإيميل"""
-        if self.test_mode:
-            return
-            
-        # التأكد من أن البريد الإلكتروني ينتهي بنطاق صحيح
-        if self.from_email and not self.from_email.endswith(('@zoho.com', '@gmail.com')) and '@' in self.from_email:
-            domain = self.from_email.split('@')[1]
-            logger.info(f"📧 استخدام النطاق المخصص: {domain}")
-        
-        # التحقق من متغيرات البيئة المطلوبة
-        required_vars = {
-            'ZOHO_EMAIL_USERNAME': self.username,
-            'ZOHO_EMAIL_PASSWORD': self.password,
-            'FROM_EMAIL': self.from_email
-        }
-        
-        missing_vars = [var for var, value in required_vars.items() if not value]
-        if missing_vars:
-            logger.error(f"❌ متغيرات البيئة المفقودة: {', '.join(missing_vars)}")
+        logger.info("Zoho Email Service initialized successfully")
 
     async def send_email_smtp(
         self,
@@ -78,26 +48,25 @@ class ZohoEmailService:
         html_content: str,
         text_content: Optional[str] = None
     ) -> bool:
-        """إرسال إيميل عبر Zoho SMTP - مُصحح تماماً"""
+        """إرسال إيميل عبر Zoho SMTP"""
         try:
-            if self.test_mode:
-                logger.info(f"📧 [وضع الاختبار] إيميل لـ {to_email}")
-                logger.info(f"📋 الموضوع: {subject}")
-                logger.info(f"📄 المحتوى: {html_content[:200]}...")
-                return True
-
-            # إنشاء الرسالة مع ترميز صحيح
+            # إنشاء الرسالة
             message = MIMEMultipart("alternative")
             message["Subject"] = subject
             message["From"] = f"{self.from_name} <{self.from_email}>"
             message["To"] = to_email
             message["Reply-To"] = self.from_email
             
-            # إضافة headers إضافية لتحسين التسليم
-            message["Message-ID"] = f"<{datetime.now().strftime('%Y%m%d%H%M%S')}@{self.from_email.split('@')[1]}>"
-            message["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
+            # Message-ID بالنطاق الصحيح
+            domain = self.from_email.split('@')[1] if '@' in self.from_email else 'seoraysa.com'
+            message["Message-ID"] = f"<{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}@{domain}>"
+            
+            # Headers إضافية
+            message["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
+            message["X-Mailer"] = "SEO Raysa System"
+            message["X-Priority"] = "3"
 
-            # إضافة النص العادي إذا توفر
+            # إضافة النص العادي
             if text_content:
                 text_part = MIMEText(text_content, "plain", "utf-8")
                 message.attach(text_part)
@@ -106,103 +75,50 @@ class ZohoEmailService:
             html_part = MIMEText(html_content, "html", "utf-8")
             message.attach(html_part)
 
-            # 🔥 الإصلاح الرئيسي: استخدام إعدادات Zoho الصحيحة
-            logger.info(f"🔄 محاولة إرسال إيميل لـ {to_email}...")
+            logger.info(f"Sending email to {to_email}")
             
-            # خيار 1: منفذ 465 مع SSL مباشرة (الأكثر موثوقية مع Zoho)
+            # محاولة إرسال عبر SSL (منفذ 465)
             try:
-                logger.info(f"🔒 محاولة SSL على منفذ 465...")
                 async with aiosmtplib.SMTP(
                     hostname=self.smtp_server,
-                    port=465,  # منفذ SSL
-                    use_tls=True,  # استخدام SSL مباشرة
+                    port=465,
+                    use_tls=True,
                     timeout=60
                 ) as server:
-                    # تسجيل الدخول مباشرة (بدون STARTTLS)
                     await server.login(self.username, self.password)
-                    logger.info(f"✅ تم تسجيل الدخول بنجاح على منفذ 465")
-                    
-                    # إرسال الرسالة
                     await server.send_message(message)
-                    logger.info(f"✅ تم إرسال الإيميل بنجاح لـ {to_email}")
+                    logger.info(f"Email sent successfully to {to_email}")
                     
                 return True
                 
             except Exception as ssl_error:
-                logger.warning(f"⚠️ فشل SSL على منفذ 465: {str(ssl_error)}")
+                logger.warning(f"SSL failed, trying STARTTLS: {str(ssl_error)}")
                 
-                # خيار 2: منفذ 587 مع STARTTLS (إعدادات محسنة)
-                try:
-                    logger.info(f"🔓 محاولة STARTTLS على منفذ 587...")
-                    async with aiosmtplib.SMTP(
-                        hostname=self.smtp_server,
-                        port=587,
-                        use_tls=False,  # عدم استخدام TLS مباشرة
-                        start_tls=False,  # عدم بدء TLS تلقائياً
-                        timeout=60
-                    ) as server:
-                        # بدء STARTTLS يدوياً
-                        await server.starttls()
-                        logger.info(f"✅ تم تفعيل STARTTLS بنجاح")
-                        
-                        # تسجيل الدخول
-                        await server.login(self.username, self.password)
-                        logger.info(f"✅ تم تسجيل الدخول بنجاح على منفذ 587")
-                        
-                        # إرسال الرسالة
-                        await server.send_message(message)
-                        logger.info(f"✅ تم إرسال الإيميل بنجاح لـ {to_email}")
-                        
-                    return True
+                # محاولة إرسال عبر STARTTLS (منفذ 587)
+                async with aiosmtplib.SMTP(
+                    hostname=self.smtp_server,
+                    port=587,
+                    use_tls=False,
+                    start_tls=False,
+                    timeout=60
+                ) as server:
+                    await server.starttls()
+                    await server.login(self.username, self.password)
+                    await server.send_message(message)
+                    logger.info(f"Email sent successfully to {to_email} via STARTTLS")
                     
-                except Exception as starttls_error:
-                    logger.error(f"❌ فشل STARTTLS على منفذ 587: {str(starttls_error)}")
-                    
-                    # خيار 3: منفذ 25 كحل أخير (إذا كان متاحاً)
-                    try:
-                        logger.info(f"🔄 محاولة منفذ 25...")
-                        async with aiosmtplib.SMTP(
-                            hostname=self.smtp_server,
-                            port=25,
-                            use_tls=False,
-                            timeout=60
-                        ) as server:
-                            await server.starttls()
-                            await server.login(self.username, self.password)
-                            await server.send_message(message)
-                            logger.info(f"✅ تم إرسال الإيميل بنجاح على منفذ 25")
-                            
-                        return True
-                        
-                    except Exception as port25_error:
-                        logger.error(f"❌ فشل على منفذ 25: {str(port25_error)}")
-                        raise port25_error
+                return True
 
         except aiosmtplib.SMTPAuthenticationError as auth_error:
-            logger.error(f"❌ خطأ في المصادقة: {str(auth_error)}")
-            logger.error("💡 تحقق من اسم المستخدم وكلمة المرور")
-            logger.error(f"   Username: {self.username}")
-            logger.error(f"   Password: {'*' * len(self.password) if self.password else 'NOT SET'}")
+            logger.error(f"SMTP authentication failed: {str(auth_error)}")
             return False
             
         except aiosmtplib.SMTPRecipientsRefused as recipient_error:
-            logger.error(f"❌ خطأ في عنوان المستقبل {to_email}: {str(recipient_error)}")
+            logger.error(f"Recipient refused {to_email}: {str(recipient_error)}")
             return False
             
-        except aiosmtplib.SMTPDataError as data_error:
-            logger.error(f"❌ خطأ في بيانات الرسالة: {str(data_error)}")
-            return False
-
         except Exception as e:
-            logger.error(f"❌ فشل إرسال إيميل لـ {to_email}: {str(e)}")
-            
-            # طباعة تفاصيل إضافية للتشخيص
-            logger.error(f"🔍 تفاصيل الخطأ:")
-            logger.error(f"   - SMTP Server: {self.smtp_server}")
-            logger.error(f"   - Username: {self.username}")
-            logger.error(f"   - From Email: {self.from_email}")
-            logger.error(f"   - To Email: {to_email}")
-            
+            logger.error(f"Failed to send email to {to_email}: {str(e)}")
             return False
 
     async def send_email_with_retry(
@@ -217,7 +133,7 @@ class ZohoEmailService:
         
         for attempt in range(max_retries):
             try:
-                logger.info(f"🔄 محاولة الإرسال #{attempt + 1} لـ {to_email}")
+                logger.info(f"Email attempt #{attempt + 1} to {to_email}")
                 
                 success = await self.send_email_smtp(to_email, subject, html_content, text_content)
                 
@@ -225,32 +141,27 @@ class ZohoEmailService:
                     return True
                     
                 if attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 2  # تأخير متزايد
-                    logger.info(f"⏱️ انتظار {wait_time} ثانية قبل إعادة المحاولة...")
+                    wait_time = (attempt + 1) * 2
+                    logger.info(f"Waiting {wait_time} seconds before retry...")
                     await asyncio.sleep(wait_time)
                     
             except Exception as e:
-                logger.error(f"❌ خطأ في المحاولة #{attempt + 1}: {str(e)}")
+                logger.error(f"Error in attempt #{attempt + 1}: {str(e)}")
                 
                 if attempt < max_retries - 1:
                     wait_time = (attempt + 1) * 2
                     await asyncio.sleep(wait_time)
         
-        logger.error(f"❌ فشل إرسال الإيميل نهائياً بعد {max_retries} محاولات")
+        logger.error(f"Failed to send email to {to_email} after {max_retries} attempts")
         return False
 
     async def test_connection(self) -> bool:
-        """اختبار الاتصال بخادم Zoho SMTP - محسن"""
+        """اختبار الاتصال بخادم Zoho SMTP"""
         try:
-            if self.test_mode:
-                logger.info("📧 [وضع الاختبار] اختبار الاتصال نجح")
-                return True
-                
-            logger.info("🔍 اختبار الاتصال بخادم Zoho SMTP...")
+            logger.info("Testing Zoho SMTP connection...")
             
-            # اختبار منفذ 465 أولاً
+            # اختبار منفذ 465
             try:
-                logger.info("🔒 اختبار منفذ 465 (SSL)...")
                 async with aiosmtplib.SMTP(
                     hostname=self.smtp_server,
                     port=465,
@@ -258,14 +169,13 @@ class ZohoEmailService:
                     timeout=30
                 ) as server:
                     await server.login(self.username, self.password)
-                    logger.info("✅ اختبار منفذ 465 نجح!")
+                    logger.info("Port 465 connection test successful")
                     return True
             except Exception as ssl_error:
-                logger.warning(f"⚠️ فشل اختبار منفذ 465: {str(ssl_error)}")
+                logger.warning(f"Port 465 test failed: {str(ssl_error)}")
             
             # اختبار منفذ 587
             try:
-                logger.info("🔓 اختبار منفذ 587 (STARTTLS)...")
                 async with aiosmtplib.SMTP(
                     hostname=self.smtp_server,
                     port=587,
@@ -274,16 +184,16 @@ class ZohoEmailService:
                 ) as server:
                     await server.starttls()
                     await server.login(self.username, self.password)
-                    logger.info("✅ اختبار منفذ 587 نجح!")
+                    logger.info("Port 587 connection test successful")
                     return True
             except Exception as starttls_error:
-                logger.warning(f"⚠️ فشل اختبار منفذ 587: {str(starttls_error)}")
+                logger.warning(f"Port 587 test failed: {str(starttls_error)}")
             
-            logger.error("❌ فشل جميع اختبارات الاتصال")
+            logger.error("All connection tests failed")
             return False
             
         except Exception as e:
-            logger.error(f"❌ فشل اختبار الاتصال: {str(e)}")
+            logger.error(f"Connection test failed: {str(e)}")
             return False
 
     def load_template(self, template_name: str) -> str:
@@ -300,7 +210,7 @@ class ZohoEmailService:
             return default_template
 
     def get_default_template(self) -> str:
-        """قالب HTML افتراضي مُحسن"""
+        """قالب HTML افتراضي احترافي"""
         return """
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
@@ -408,20 +318,20 @@ class ZohoEmailService:
 <body>
     <div class="container">
         <div class="header">
-            <h1>{{ header_title | default('🚀 فريق تحسين السيو') }}</h1>
+            <h1>{{ header_title | default('🚀 SEO Raysa Team') }}</h1>
         </div>
         <div class="content">
             {{ content }}
         </div>
         <div class="footer">
-            <p><strong>هذا إيميل تلقائي من نظام تحسين السيو</strong></p>
+            <p><strong>This is an automated email from SEO Raysa System</strong></p>
             <p>
-                <a href="{{ frontend_url }}">🌐 الموقع الرئيسي</a> | 
-                <a href="mailto:{{ support_email }}">📞 الدعم الفني</a> |
-                <a href="{{ frontend_url }}/unsubscribe">❌ إلغاء الاشتراك</a>
+                <a href="{{ frontend_url }}">🌐 Website</a> | 
+                <a href="mailto:{{ support_email }}">📞 Support</a> |
+                <a href="{{ frontend_url }}/unsubscribe">❌ Unsubscribe</a>
             </p>
             <p style="margin-top: 15px; color: #999; font-size: 12px;">
-                © {{ current_year }} جميع الحقوق محفوظة لفريق تحسين السيو
+                © {{ current_year }} All rights reserved - SEO Raysa
             </p>
         </div>
     </div>
@@ -443,10 +353,9 @@ class ZohoEmailService:
             template = Template(template_content)
             return template.render(**variables)
         except Exception as e:
-            logger.error(f"❌ خطأ في معالجة القالب: {str(e)}")
+            logger.error(f"Template rendering error: {str(e)}")
             return template_content
 
-    # دوال الإيميلات المخصصة
     async def send_store_welcome_email(
         self,
         store_email: str,
@@ -455,44 +364,44 @@ class ZohoEmailService:
         verification_token: str,
         products_count: int = 0
     ) -> bool:
-        """إرسال إيميل ترحيب مع إعادة المحاولة"""
+        """إرسال إيميل ترحيب للمتجر الجديد"""
         
         verification_link = f"{self.frontend_url}/connect-store?token={verification_token}"
         
         content = f"""
-        <h2>🎉 مبروك! تم تثبيت تطبيق تحسين السيو بنجاح</h2>
+        <h2>🎉 Welcome! SEO optimization app installed successfully</h2>
         
-        <p>مرحباً صاحب متجر <strong>{store_name}</strong>!</p>
+        <p>Hello <strong>{store_name}</strong> owner!</p>
         
-        <p>تم ربط متجرك بنظام تحسين السيو بنجاح. الآن يمكنك الاستفادة من:</p>
+        <p>Your store has been successfully connected to our SEO optimization system. Now you can benefit from:</p>
         
         <ul>
-            <li><span class="emoji">🔍</span> تحليل تلقائي لجميع منتجاتك ({products_count} منتج)</li>
-            <li><span class="emoji">🤖</span> تحسين السيو بالذكاء الاصطناعي</li>
-            <li><span class="emoji">📈</span> زيادة الظهور في نتائج البحث</li>
-            <li><span class="emoji">📊</span> تقارير شاملة عن أداء متجرك</li>
+            <li><span class="emoji">🔍</span> Automatic analysis for all your products ({products_count} products)</li>
+            <li><span class="emoji">🤖</span> AI-powered SEO optimization</li>
+            <li><span class="emoji">📈</span> Increased visibility in search results</li>
+            <li><span class="emoji">📊</span> Comprehensive reports on your store performance</li>
         </ul>
         
         <div style="text-align: center; margin: 30px 0;">
             <a href="{verification_link}" class="button">
-                🚀 ابدأ تحسين متجرك الآن
+                🚀 Start optimizing your store now
             </a>
         </div>
         
         <div class="info-box">
-            <p><strong>📝 معلومات مهمة:</strong></p>
-            <p>• معرف متجرك: <code>#{store_id}</code></p>
-            <p>• صالح لمدة 7 أيام من تاريخ هذا الإيميل</p>
-            <p>• إذا كان لديك حساب مسبقاً، سجل دخول أولاً ثم اضغط الرابط</p>
+            <p><strong>📝 Important information:</strong></p>
+            <p>• Your store ID: <code>#{store_id}</code></p>
+            <p>• Valid for 7 days from this email date</p>
+            <p>• If you already have an account, login first then click the link</p>
         </div>
         
-        <p>تحتاج مساعدة؟ لا تتردد في <a href="mailto:{self.support_email}">التواصل معنا</a></p>
+        <p>Need help? Don't hesitate to <a href="mailto:{self.support_email}">contact us</a></p>
         
-        <p>مع تحيات فريق تحسين السيو ❤️</p>
+        <p>Best regards, SEO Raysa Team ❤️</p>
         """
         
         variables = {
-            'header_title': f'🎉 مرحباً بمتجر {store_name}',
+            'header_title': f'🎉 Welcome {store_name}',
             'content': content
         }
         
@@ -501,7 +410,7 @@ class ZohoEmailService:
         
         return await self.send_email_with_retry(
             to_email=store_email,
-            subject=f"🎉 مبروك! تم ربط متجر {store_name} بنجاح",
+            subject=f"🎉 Welcome! {store_name} connected successfully",
             html_content=html_content
         )
 
@@ -513,43 +422,43 @@ class ZohoEmailService:
         verification_token: str,
         days_remaining: int
     ) -> bool:
-        """إرسال إيميل تذكير"""
+        """إرسال إيميل تذكير للمتجر"""
         
         verification_link = f"{self.frontend_url}/connect-store?token={verification_token}"
         
         content = f"""
-        <h2>⏰ تذكير مهم: ربط متجر {store_name}</h2>
+        <h2>⏰ Important reminder: Connect {store_name}</h2>
         
-        <p>مرحباً!</p>
+        <p>Hello!</p>
         
-        <p>نذكرك بأنه تم تثبيت تطبيق تحسين السيو في متجرك <strong>{store_name}</strong> منذ يوم، ولكن لم يتم ربطه بحسابك بعد.</p>
+        <p>We remind you that the SEO optimization app was installed in your store <strong>{store_name}</strong> yesterday, but it hasn't been connected to your account yet.</p>
         
         <div class="info-box warning">
-            <p><strong>⚠️ انتباه:</strong></p>
-            <p>يتبقى <strong>{days_remaining} أيام</strong> فقط لربط متجرك قبل انتهاء صلاحية الرابط</p>
+            <p><strong>⚠️ Attention:</strong></p>
+            <p>Only <strong>{days_remaining} days</strong> remaining to connect your store before the link expires</p>
         </div>
         
         <div style="text-align: center; margin: 30px 0;">
             <a href="{verification_link}" class="button">
-                🔗 ربط المتجر الآن
+                🔗 Connect store now
             </a>
         </div>
         
-        <p><strong>لماذا يجب عليك ربط متجرك؟</strong></p>
+        <p><strong>Why should you connect your store?</strong></p>
         <ul>
-            <li><span class="emoji">🚀</span> تحسين السيو لجميع منتجاتك تلقائياً</li>
-            <li><span class="emoji">📈</span> زيادة المبيعات عبر محركات البحث</li>
-            <li><span class="emoji">🎯</span> استهداف أفضل للعملاء المحتملين</li>
-            <li><span class="emoji">📊</span> تقارير تفصيلية عن أداء متجرك</li>
+            <li><span class="emoji">🚀</span> Automatic SEO optimization for all your products</li>
+            <li><span class="emoji">📈</span> Increase sales through search engines</li>
+            <li><span class="emoji">🎯</span> Better targeting of potential customers</li>
+            <li><span class="emoji">📊</span> Detailed reports on your store performance</li>
         </ul>
         
-        <p>إذا لم تقم بالربط خلال {days_remaining} أيام، ستحتاج لإعادة تثبيت التطبيق مرة أخرى.</p>
+        <p>If you don't connect within {days_remaining} days, you'll need to reinstall the app again.</p>
         
-        <p>مع تحيات فريق تحسين السيو 💙</p>
+        <p>Best regards, SEO Raysa Team 💙</p>
         """
         
         variables = {
-            'header_title': f'⏰ تذكير: متجر {store_name}',
+            'header_title': f'⏰ Reminder: {store_name}',
             'content': content
         }
         
@@ -558,7 +467,7 @@ class ZohoEmailService:
         
         return await self.send_email_with_retry(
             to_email=store_email,
-            subject=f"⏰ تذكير مهم: ربط متجر {store_name} ({days_remaining} أيام متبقية)",
+            subject=f"⏰ Important reminder: Connect {store_name} ({days_remaining} days remaining)",
             html_content=html_content
         )
 
@@ -574,39 +483,39 @@ class ZohoEmailService:
         dashboard_link = f"{self.frontend_url}/products"
         
         content = f"""
-        <h2>🎉 تم ربط متجرك بنجاح!</h2>
+        <h2>🎉 Your store has been connected successfully!</h2>
         
-        <p>مرحباً <strong>{user_name}</strong>!</p>
+        <p>Hello <strong>{user_name}</strong>!</p>
         
-        <p>نهنئك! تم ربط متجر <strong>{store_name}</strong> بحسابك بنجاح.</p>
+        <p>Congratulations! Store <strong>{store_name}</strong> has been successfully connected to your account.</p>
         
         <div class="info-box success">
-            <p><strong>✅ ما تم إنجازه:</strong></p>
-            <p>• تم ربط المتجر بحسابك</p>
-            <p>• تم مزامنة {products_synced} منتج</p>
-            <p>• بدء تحليل السيو للمنتجات</p>
+            <p><strong>✅ What has been accomplished:</strong></p>
+            <p>• Store connected to your account</p>
+            <p>• {products_synced} products synchronized</p>
+            <p>• SEO analysis started for products</p>
         </div>
         
         <div style="text-align: center; margin: 30px 0;">
             <a href="{dashboard_link}" class="button">
-                📊 عرض لوحة التحكم
+                📊 View dashboard
             </a>
         </div>
         
-        <p><strong>الخطوات التالية:</strong></p>
+        <p><strong>Next steps:</strong></p>
         <ol>
-            <li>راجع تحليل السيو لمنتجاتك</li>
-            <li>طبق التوصيات المقترحة</li>
-            <li>راقب تحسن ترتيب متجرك في البحث</li>
+            <li>Review SEO analysis for your products</li>
+            <li>Apply suggested recommendations</li>
+            <li>Monitor improvement in your store's search ranking</li>
         </ol>
         
-        <p>نحن متحمسون لمساعدتك في تحسين أداء متجرك!</p>
+        <p>We're excited to help you improve your store performance!</p>
         
-        <p>مع تحيات فريق تحسين السيو 🚀</p>
+        <p>Best regards, SEO Raysa Team 🚀</p>
         """
         
         variables = {
-            'header_title': f'🎉 نجح ربط {store_name}',
+            'header_title': f'🎉 {store_name} connected successfully',
             'content': content
         }
         
@@ -615,7 +524,7 @@ class ZohoEmailService:
         
         return await self.send_email_with_retry(
             to_email=user_email,
-            subject=f"🎉 تم ربط متجر {store_name} بنجاح!",
+            subject=f"🎉 Store {store_name} connected successfully!",
             html_content=html_content
         )
 
