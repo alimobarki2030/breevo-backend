@@ -1,7 +1,5 @@
-# ملف models/salla.py
-# 📍 ضع هذا الملف في مجلد models (نفس مكان user.py)
-
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, ForeignKey
+# app/models/salla.py
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
@@ -67,6 +65,12 @@ class SallaProduct(Base):
     # بيانات SEO
     seo_title = Column(String)  # عنوان SEO
     seo_description = Column(Text)  # وصف SEO
+    
+    # حقول SEO إضافية
+    seo_score = Column(Integer, default=0)  # نقاط SEO (0-100)
+    optimization_status = Column(String, default="pending")  # حالة التحسين
+    keywords = Column(JSON)  # الكلمات المفتاحية
+    meta_tags = Column(JSON)  # Meta tags إضافية
     
     # حالة المنتج
     status = Column(String)  # حالة (sale, out_of_stock, hidden)
