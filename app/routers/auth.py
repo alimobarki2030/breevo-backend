@@ -146,9 +146,9 @@ def verify_token(current_user: User = Depends(get_current_user)):
     return {
         "id": current_user.id,
         "email": current_user.email,
-        "name": current_user.name,
-        "is_active": current_user.is_active,
-        "created_at": current_user.created_at
+        "name": current_user.full_name,  # تصحيح: استخدام full_name بدلاً من name
+        "is_active": getattr(current_user, 'is_active', True),  # التعامل مع الحقل إن لم يكن موجوداً
+        "created_at": getattr(current_user, 'created_at', None)  # التعامل مع الحقل إن لم يكن موجوداً
     }
 
 @router.get("/check-email")
