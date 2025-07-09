@@ -885,3 +885,29 @@ def verify_salla_signature(payload: bytes, signature: str) -> bool:
     except Exception as e:
         logger.error(f"Error verifying webhook signature: {str(e)}")
         return False
+    
+    # أضف هذا في نهاية ملف salla.py
+
+@router.get("/test")
+async def test_salla_endpoint():
+    """endpoint تجريبي للتحقق من عمل الـ router - بدون authentication"""
+    return {
+        "status": "working",
+        "message": "Salla router is active",
+        "time": datetime.utcnow().isoformat(),
+        "endpoints": [
+            "/api/salla/authorize",
+            "/api/salla/stores", 
+            "/api/salla/oauth/callback",
+            "/api/salla/webhook"
+        ]
+    }
+
+@router.get("/test-auth")
+async def test_salla_auth(current_user: User = Depends(get_current_user)):
+    """endpoint تجريبي مع authentication"""
+    return {
+        "status": "authenticated",
+        "user": current_user.email,
+        "message": "Authentication working correctly"
+    }
