@@ -138,7 +138,7 @@ class PointTransaction(Base):
     
     # تفاصيل إضافية
     description = Column(Text)
-    metadata = Column(JSON)  # معلومات إضافية (الخدمة، المنتج، إلخ)
+    meta_data = Column(JSON)  # معلومات إضافية (الخدمة، المنتج، إلخ)
     
     # معلومات الدفع (للشراء)
     payment_method = Column(String)
