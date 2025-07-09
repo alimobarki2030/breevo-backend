@@ -1,7 +1,8 @@
 # models/user.py
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from app.database import Base
+from datetime import datetime
 
 class User(Base):
     __tablename__ = "users"
@@ -14,5 +15,13 @@ class User(Base):
     store_url = Column(String, nullable=True)
     plan = Column(String, nullable=True)
     
-    # العلاقة مع متاجر سلة
+    # حقول إضافية للإدارة
+    is_admin = Column(Boolean, default=False)
+    is_verified = Column(Boolean, default=False)
+    is_subscribed = Column(Boolean, default=False)
+    subscription_tier = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # العلاقات
     salla_stores = relationship("SallaStore", back_populates="user")
+    points = relationship("UserPoints", back_populates="user", uselist=False)  # علاقة واحد لواحد
