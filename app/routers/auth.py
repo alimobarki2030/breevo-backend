@@ -140,6 +140,17 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
     """الحصول على معلومات المستخدم الحالي"""
     return UserResponse.from_orm(current_user)
 
+@router.get("/verify")
+def verify_token(current_user: User = Depends(get_current_user)):
+    """التحقق من صحة التوكن"""
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.name,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at
+    }
+
 @router.get("/check-email")
 def check_email_exists(email: str, db: Session = Depends(get_db)):
     """التحقق من وجود البريد الإلكتروني"""
