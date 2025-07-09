@@ -1,6 +1,7 @@
-# app/main.py - نسخة نظيفة
-from fastapi import FastAPI
+# app/main.py - نسخة محدثة مع إصلاحات CORS
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.database import engine, Base
 from dotenv import load_dotenv
 import os
@@ -23,31 +24,47 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# ✅ إعدادات CORS محدثة
+# ✅ إعدادات CORS محدثة ومحسنة
 origins = [
     "http://localhost:3000",
+    "http://localhost:3001",
     "https://breevo-frontend.vercel.app", 
     "https://seoraysa.com",
     "https://www.seoraysa.com",
     "https://breevo-backend.onrender.com",
     "https://accounts.google.com",
     "https://www.google.com",
-    os.getenv("BACKEND_URL", ""),
-    os.getenv("FRONTEND_URL", "")
 ]
+
+# إضافة أي URLs إضافية من متغيرات البيئة
+if os.getenv("BACKEND_URL"):
+    origins.append(os.getenv("BACKEND_URL"))
+if os.getenv("FRONTEND_URL"):
+    origins.append(os.getenv("FRONTEND_URL"))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin for origin in origins if origin],  # تنظيف القائمة من القيم الفارغة
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 print("✅ Database engine created")
 
 # إنشاء جداول قاعدة البيانات
 Base.metadata.create_all(bind=engine)
+
+# Middleware لمعالجة الأخطاء
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    print(f"❌ Error: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)}
+    )
 
 # تسجيل الـ Routers النظيفة
 app.include_router(ai_router, prefix="/api/ai", tags=["ai"])
@@ -94,12 +111,37 @@ def system_info():
     }
 
 # Middleware لتسجيل الطلبات في development
-if os.getenv("DEBUG", "False").lower() == "true":
-    @app.middleware("http")
-    async def log_requests(request, call_next):
-        import time
-        start_time = time.time()
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    import time
+    start_time = time.time()
+    
+    # طباعة معلومات الطلب
+    print(f"📨 {request.method} {request.url.path}")
+    
+    # معالجة OPTIONS requests
+    if request.method == "OPTIONS":
+        return JSONResponse(
+            content={},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
+    
+    try:
         response = await call_next(request)
         process_time = time.time() - start_time
-        print(f"⏱️ {request.method} {request.url.path} - {process_time:.3f}s")
+        
+        # إضافة headers إضافية
+        response.headers["X-Process-Time"] = str(process_time)
+        
+        # طباعة معلومات الاستجابة
+        print(f"✅ {request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s")
+        
         return response
+    except Exception as e:
+        process_time = time.time() - start_time
+        print(f"❌ {request.method} {request.url.path} - ERROR - {process_time:.3f}s - {str(e)}")
+        raise
