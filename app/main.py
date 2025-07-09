@@ -15,6 +15,7 @@ from app.routers.salla_products import router as salla_products_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.points import router as points_router
 from app.routers.subscription import router as subscription_router
+from app.routers.admin import router as admin_router
 
 load_dotenv()
 
@@ -75,6 +76,7 @@ app.include_router(salla_products_router)
 app.include_router(dashboard_router)
 app.include_router(points_router)
 app.include_router(subscription_router)
+app.include_router(admin_router)
 
 @app.get("/")
 def read_root():
