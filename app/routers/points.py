@@ -11,15 +11,15 @@ from app.database import get_db
 from app.models.user import User
 from app.models.points import (
     UserPoints, PointPackage, PointTransaction, ServicePricing,
-    PointPackagePurchase, ServiceUsage, TransactionType, ServiceType
+    PointPurchase, TransactionType, ServiceType
 )
 from app.schemas.points import (
-    PointsBalanceResponse, PointsBalanceUpdate,
+    PointsBalanceResponse,
     PointPackageResponse, PointPackagesListResponse,
     TransactionResponse, TransactionsListRequest, TransactionsListResponse,
     ServicePricingResponse, ServicesListResponse,
     PackagePurchaseRequest, PackagePurchaseResponse,
-    ServiceUsageRequest, ServiceUsageResponse,
+    ServiceUsageRequest,
     PointsAnalyticsRequest, PointsAnalyticsResponse,
     CheckBalanceRequest, CheckBalanceResponse,
     BulkServiceRequest, BulkServiceResponse
@@ -48,18 +48,15 @@ async def get_points_balance(
         # الحصول على حساب النقاط أو إنشاؤه
         user_points = points_service.get_or_create_user_points(current_user.id)
         
-        # التحقق من إعادة تعيين الحد اليومي
-        points_service.check_daily_reset(user_points)
-        
         return PointsBalanceResponse(
             balance=user_points.balance,
             total_purchased=user_points.total_purchased,
             total_spent=user_points.total_spent,
             total_refunded=user_points.total_refunded,
-            daily_limit=user_points.daily_limit,
-            daily_used=user_points.daily_used,
-            daily_remaining=max(0, user_points.daily_limit - user_points.daily_used),
-            last_reset_date=user_points.last_reset_date
+            monthly_points=user_points.monthly_points,
+            monthly_points_used=user_points.monthly_points_used,
+            available_monthly_points=user_points.available_monthly_points,
+            monthly_reset_date=user_points.monthly_reset_date
         )
         
     except Exception as e:
@@ -68,7 +65,8 @@ async def get_points_balance(
 
 @router.get("/check-balance", response_model=CheckBalanceResponse)
 async def check_balance_for_service(
-    request: CheckBalanceRequest = Depends(),
+    service_type: ServiceType = Query(..., description="نوع الخدمة"),
+    quantity: int = Query(1, ge=1, description="الكمية"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -78,7 +76,7 @@ async def check_balance_for_service(
     try:
         # الحصول على تسعير الخدمة
         service_pricing = db.query(ServicePricing).filter(
-            ServicePricing.service_type == request.service_type,
+            ServicePricing.service_type == service_type,
             ServicePricing.is_active == True
         ).first()
         
@@ -86,7 +84,7 @@ async def check_balance_for_service(
             raise HTTPException(status_code=404, detail="الخدمة غير موجودة")
         
         user_points = points_service.get_or_create_user_points(current_user.id)
-        required_points = service_pricing.points_cost * request.quantity
+        required_points = service_pricing.point_cost * quantity
         has_sufficient = user_points.balance >= required_points
         shortage = max(0, required_points - user_points.balance) if not has_sufficient else None
         
@@ -172,33 +170,45 @@ async def purchase_point_package(
         
         # إضافة النقاط
         user_points = points_service.get_or_create_user_points(current_user.id)
-        new_balance = points_service.add_points(
-            user_points=user_points,
-            amount=package.points,
+        balance_before = user_points.balance
+        user_points.balance += package.points
+        user_points.total_purchased += package.points
+        
+        # إنشاء معاملة
+        transaction = PointTransaction(
+            user_id=current_user.id,
+            user_points_id=user_points.id,
             transaction_type=TransactionType.PURCHASE,
+            amount=package.points,
+            balance_before=balance_before,
+            balance_after=user_points.balance,
             description=f"شراء باقة {package.name}",
             reference_type="package",
-            reference_id=package.id,
+            reference_id=str(package.id),
             payment_method=request.payment_method,
             payment_reference=payment_result['transaction_id']
         )
+        db.add(transaction)
         
         # تسجيل عملية الشراء
-        purchase = PointPackagePurchase(
-            user_id=user_points.id,
+        purchase = PointPurchase(
+            user_id=current_user.id,
             package_id=package.id,
-            points_purchased=package.points,
-            price_paid=package.price,
+            points=package.points,
+            price=package.price,
+            vat_amount=package.price * Decimal('0.15'),
+            total_amount=package.price * Decimal('1.15'),
             payment_method=request.payment_method,
             payment_reference=payment_result['transaction_id'],
-            status="completed"
+            payment_status="completed",
+            paid_at=datetime.utcnow()
         )
         db.add(purchase)
         db.commit()
         
         # إرسال إيميل تأكيد (في الخلفية)
         background_tasks.add_task(
-            points_service.send_purchase_confirmation,
+            send_purchase_confirmation_email,
             current_user.email,
             package.name,
             package.points,
@@ -210,7 +220,7 @@ async def purchase_point_package(
             package_name=package.name,
             points_purchased=package.points,
             price_paid=package.price,
-            new_balance=new_balance,
+            new_balance=user_points.balance,
             payment_method=request.payment_method,
             status="completed",
             created_at=purchase.created_at
@@ -227,53 +237,44 @@ async def purchase_point_package(
 
 @router.get("/transactions", response_model=TransactionsListResponse)
 async def get_transactions(
-    request: TransactionsListRequest = Depends(),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    type: Optional[TransactionType] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """الحصول على سجل معاملات النقاط"""
     try:
-        user_points = db.query(UserPoints).filter(
-            UserPoints.user_id == current_user.id
-        ).first()
-        
-        if not user_points:
-            return TransactionsListResponse(
-                transactions=[],
-                total=0,
-                page=request.page,
-                per_page=request.per_page,
-                pages=0
-            )
-        
         query = db.query(PointTransaction).filter(
-            PointTransaction.user_id == user_points.id
+            PointTransaction.user_id == current_user.id
         )
         
         # تطبيق الفلاتر
-        if request.type:
-            query = query.filter(PointTransaction.type == request.type)
+        if type:
+            query = query.filter(PointTransaction.transaction_type == type)
         
-        if request.start_date:
-            query = query.filter(PointTransaction.created_at >= request.start_date)
+        if start_date:
+            query = query.filter(PointTransaction.created_at >= start_date)
         
-        if request.end_date:
-            query = query.filter(PointTransaction.created_at <= request.end_date)
+        if end_date:
+            query = query.filter(PointTransaction.created_at <= end_date)
         
         # العد الإجمالي
         total = query.count()
         
         # التقسيم
         transactions = query.order_by(PointTransaction.created_at.desc()).offset(
-            (request.page - 1) * request.per_page
-        ).limit(request.per_page).all()
+            (page - 1) * per_page
+        ).limit(per_page).all()
         
         return TransactionsListResponse(
             transactions=transactions,
             total=total,
-            page=request.page,
-            per_page=request.per_page,
-            pages=(total + request.per_page - 1) // request.per_page
+            page=page,
+            per_page=per_page,
+            pages=(total + per_page - 1) // per_page
         )
         
     except Exception as e:
@@ -296,7 +297,7 @@ async def get_services_pricing(
         if category:
             query = query.filter(ServicePricing.category == category)
         
-        services = query.order_by(ServicePricing.points_cost).all()
+        services = query.order_by(ServicePricing.point_cost).all()
         
         # جمع الفئات الفريدة
         categories = db.query(ServicePricing.category).filter(
@@ -313,7 +314,7 @@ async def get_services_pricing(
         logger.error(f"Error getting services: {str(e)}")
         raise HTTPException(status_code=500, detail=f"خطأ في جلب الخدمات: {str(e)}")
 
-@router.post("/services/use", response_model=ServiceUsageResponse)
+@router.post("/services/use")
 async def use_service(
     request: ServiceUsageRequest,
     background_tasks: BackgroundTasks,
@@ -336,52 +337,56 @@ async def use_service(
         # التحقق من الرصيد
         user_points = points_service.get_or_create_user_points(current_user.id)
         
-        if user_points.balance < service.points_cost:
+        if user_points.balance < service.point_cost:
             raise HTTPException(
                 status_code=400, 
-                detail=f"رصيد غير كافي. المطلوب: {service.points_cost} نقطة، المتوفر: {user_points.balance} نقطة"
+                detail=f"رصيد غير كافي. المطلوب: {service.point_cost} نقطة، المتوفر: {user_points.balance} نقطة"
             )
         
         # خصم النقاط
-        new_balance = points_service.deduct_points(
-            user_points=user_points,
-            amount=service.points_cost,
+        balance_before = user_points.balance
+        user_points.balance -= service.point_cost
+        user_points.total_spent += service.point_cost
+        
+        # إنشاء معاملة
+        transaction = PointTransaction(
+            user_id=current_user.id,
+            user_points_id=user_points.id,
             transaction_type=TransactionType.DEDUCT,
+            amount=-service.point_cost,
+            balance_before=balance_before,
+            balance_after=user_points.balance,
             description=f"استخدام خدمة: {service.name}",
             reference_type="service",
-            reference_id=service.id
+            reference_id=str(service.id),
+            meta_data={
+                "service_type": request.service_type.value,
+                "product_id": request.product_id,
+                "store_id": request.store_id,
+                "options": request.options
+            }
         )
-        
-        # تسجيل الاستخدام
-        usage = ServiceUsage(
-            user_id=current_user.id,
-            service_type=request.service_type,
-            points_spent=service.points_cost,
-            transaction_id=user_points.transactions[-1].id,  # آخر معاملة
-            product_id=request.product_id,
-            store_id=request.store_id,
-            status="processing"
-        )
-        db.add(usage)
+        db.add(transaction)
         db.commit()
         
         # تنفيذ الخدمة في الخلفية
         background_tasks.add_task(
-            points_service.execute_service,
-            usage.id,
+            execute_service_task,
+            current_user.id,
             request.service_type,
-            request.options
+            request.options,
+            transaction.id
         )
         
-        return ServiceUsageResponse(
-            usage_id=usage.id,
-            service_type=request.service_type,
-            service_name=service.name,
-            points_spent=service.points_cost,
-            new_balance=new_balance,
-            status="processing",
-            created_at=usage.created_at
-        )
+        return {
+            "success": True,
+            "transaction_id": transaction.id,
+            "service_type": request.service_type,
+            "service_name": service.name,
+            "points_spent": service.point_cost,
+            "new_balance": user_points.balance,
+            "status": "processing"
+        }
         
     except HTTPException:
         raise
@@ -392,9 +397,11 @@ async def use_service(
 
 # ===== التحليلات =====
 
-@router.get("/analytics", response_model=PointsAnalyticsResponse)
+@router.get("/analytics")
 async def get_points_analytics(
-    request: PointsAnalyticsRequest = Depends(),
+    period: str = Query("month", regex="^(week|month|year|all)$"),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -406,48 +413,78 @@ async def get_points_analytics(
         
         if not user_points:
             # إرجاع تحليلات فارغة
-            return PointsAnalyticsResponse(
-                total_purchased=0,
-                total_spent=0,
-                total_refunded=0,
-                current_balance=0,
-                usage_by_service={},
-                usage_by_month=[],
-                top_services=[],
-                average_daily_usage=0,
-                average_monthly_usage=0,
-                period=request.period,
-                start_date=datetime.utcnow() - timedelta(days=30),
-                end_date=datetime.utcnow()
-            )
+            return {
+                "total_purchased": 0,
+                "total_spent": 0,
+                "total_refunded": 0,
+                "current_balance": 0,
+                "usage_by_service": {},
+                "usage_by_month": [],
+                "top_services": [],
+                "average_daily_usage": 0,
+                "average_monthly_usage": 0,
+                "period": period
+            }
         
         # تحديد الفترة الزمنية
-        end_date = request.end_date or datetime.utcnow()
-        if request.start_date:
-            start_date = request.start_date
-        else:
-            if request.period == "week":
+        if not end_date:
+            end_date = datetime.utcnow()
+        
+        if not start_date:
+            if period == "week":
                 start_date = end_date - timedelta(days=7)
-            elif request.period == "month":
+            elif period == "month":
                 start_date = end_date - timedelta(days=30)
-            elif request.period == "year":
+            elif period == "year":
                 start_date = end_date - timedelta(days=365)
             else:  # all
                 start_date = user_points.created_at
         
-        # جلب الإحصائيات
-        analytics = points_service.get_analytics(
-            user_points_id=user_points.id,
-            start_date=start_date,
-            end_date=end_date
-        )
+        # جلب المعاملات في الفترة
+        transactions = db.query(PointTransaction).filter(
+            PointTransaction.user_id == current_user.id,
+            PointTransaction.created_at >= start_date,
+            PointTransaction.created_at <= end_date
+        ).all()
         
-        return PointsAnalyticsResponse(
-            **analytics,
-            period=request.period,
-            start_date=start_date,
-            end_date=end_date
-        )
+        # حساب الإحصائيات
+        usage_by_service = {}
+        for transaction in transactions:
+            if transaction.transaction_type == TransactionType.DEDUCT and transaction.reference_type == "service":
+                service_name = transaction.description.replace("استخدام خدمة: ", "")
+                if service_name not in usage_by_service:
+                    usage_by_service[service_name] = {
+                        "count": 0,
+                        "total_points": 0
+                    }
+                usage_by_service[service_name]["count"] += 1
+                usage_by_service[service_name]["total_points"] += abs(transaction.amount)
+        
+        # أكثر الخدمات استخداماً
+        top_services = sorted(
+            [{"service": k, "count": v["count"], "points": v["total_points"]} 
+             for k, v in usage_by_service.items()],
+            key=lambda x: x["count"],
+            reverse=True
+        )[:5]
+        
+        # معدل الاستخدام
+        days = max(1, (end_date - start_date).days)
+        total_spent_period = sum(abs(t.amount) for t in transactions if t.amount < 0)
+        
+        return {
+            "total_purchased": user_points.total_purchased,
+            "total_spent": user_points.total_spent,
+            "total_refunded": user_points.total_refunded,
+            "current_balance": user_points.balance,
+            "usage_by_service": usage_by_service,
+            "top_services": top_services,
+            "average_daily_usage": round(total_spent_period / days, 2),
+            "average_monthly_usage": round(total_spent_period / days * 30, 2),
+            "period": period,
+            "start_date": start_date,
+            "end_date": end_date
+        }
         
     except Exception as e:
         logger.error(f"Error getting analytics: {str(e)}")
@@ -455,7 +492,7 @@ async def get_points_analytics(
 
 # ===== العمليات الجماعية =====
 
-@router.post("/services/bulk", response_model=BulkServiceResponse)
+@router.post("/services/bulk")
 async def use_service_bulk(
     request: BulkServiceRequest,
     background_tasks: BackgroundTasks,
@@ -477,7 +514,7 @@ async def use_service_bulk(
         
         # حساب التكلفة الإجمالية
         total_products = len(request.product_ids)
-        total_cost = service.points_cost * total_products
+        total_cost = service.point_cost * total_products
         
         # التحقق من الرصيد
         user_points = points_service.get_or_create_user_points(current_user.id)
@@ -489,54 +526,55 @@ async def use_service_bulk(
             )
         
         # خصم النقاط
-        new_balance = points_service.deduct_points(
-            user_points=user_points,
-            amount=total_cost,
+        balance_before = user_points.balance
+        user_points.balance -= total_cost
+        user_points.total_spent += total_cost
+        
+        # إنشاء معاملة
+        transaction = PointTransaction(
+            user_id=current_user.id,
+            user_points_id=user_points.id,
             transaction_type=TransactionType.DEDUCT,
+            amount=-total_cost,
+            balance_before=balance_before,
+            balance_after=user_points.balance,
             description=f"استخدام خدمة {service.name} على {total_products} منتج",
             reference_type="bulk_service",
-            reference_id=service.id,
-            metadata={
+            reference_id=str(service.id),
+            meta_data={
                 "product_ids": request.product_ids,
                 "total_products": total_products
             }
         )
-        
-        # إنشاء مهام لكل منتج
-        results = []
-        for product_id in request.product_ids:
-            usage = ServiceUsage(
-                user_id=current_user.id,
-                service_type=request.service_type,
-                points_spent=service.points_cost,
-                product_id=product_id,
-                status="pending"
-            )
-            db.add(usage)
-            results.append({
-                "product_id": product_id,
-                "usage_id": usage.id,
-                "status": "pending"
-            })
-        
+        db.add(transaction)
         db.commit()
         
         # تنفيذ الخدمات في الخلفية
+        results = []
+        for product_id in request.product_ids:
+            results.append({
+                "product_id": product_id,
+                "status": "pending"
+            })
+        
         background_tasks.add_task(
-            points_service.execute_bulk_service,
-            [r["usage_id"] for r in results],
+            execute_bulk_service_task,
+            current_user.id,
             request.service_type,
-            request.options
+            request.product_ids,
+            request.options,
+            transaction.id
         )
         
-        return BulkServiceResponse(
-            total_products=total_products,
-            total_points=total_cost,
-            processed=0,
-            failed=0,
-            results=results,
-            new_balance=new_balance
-        )
+        return {
+            "success": True,
+            "total_products": total_products,
+            "total_points": total_cost,
+            "processed": 0,
+            "failed": 0,
+            "results": results,
+            "new_balance": user_points.balance
+        }
         
     except HTTPException:
         raise
@@ -568,20 +606,58 @@ async def add_bonus_points(
         
         # إضافة النقاط
         user_points = points_service.get_or_create_user_points(target_user_id)
-        new_balance = points_service.add_points(
-            user_points=user_points,
-            amount=amount,
+        balance_before = user_points.balance
+        user_points.balance += amount
+        user_points.total_bonus = (user_points.total_bonus or 0) + amount
+        
+        # إنشاء معاملة
+        transaction = PointTransaction(
+            user_id=target_user_id,
+            user_points_id=user_points.id,
             transaction_type=TransactionType.BONUS,
+            amount=amount,
+            balance_before=balance_before,
+            balance_after=user_points.balance,
             description=f"مكافأة: {reason}",
             reference_type="admin_bonus"
         )
+        db.add(transaction)
+        db.commit()
         
         return {
             "success": True,
             "message": f"تم إضافة {amount} نقطة بنجاح",
-            "new_balance": new_balance
+            "new_balance": user_points.balance
         }
         
     except Exception as e:
         logger.error(f"Error adding bonus points: {str(e)}")
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"خطأ في إضافة النقاط: {str(e)}")
+
+# ===== مهام الخلفية =====
+
+async def send_purchase_confirmation_email(email: str, package_name: str, points: int, price: float):
+    """إرسال إيميل تأكيد الشراء"""
+    try:
+        # هنا يتم إرسال الإيميل
+        logger.info(f"Sending purchase confirmation to {email}")
+    except Exception as e:
+        logger.error(f"Error sending email: {str(e)}")
+
+async def execute_service_task(user_id: int, service_type: ServiceType, options: dict, transaction_id: int):
+    """تنفيذ الخدمة في الخلفية"""
+    try:
+        # هنا يتم تنفيذ الخدمة الفعلية
+        logger.info(f"Executing service {service_type} for user {user_id}")
+    except Exception as e:
+        logger.error(f"Error executing service: {str(e)}")
+
+async def execute_bulk_service_task(user_id: int, service_type: ServiceType, product_ids: List[int], options: dict, transaction_id: int):
+    """تنفيذ خدمة جماعية في الخلفية"""
+    try:
+        for product_id in product_ids:
+            # تنفيذ الخدمة لكل منتج
+            logger.info(f"Executing service {service_type} for product {product_id}")
+    except Exception as e:
+        logger.error(f"Error executing bulk service: {str(e)}")
