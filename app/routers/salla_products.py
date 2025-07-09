@@ -1,10 +1,11 @@
 # app/routers/salla_products.py
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, func
+from sqlalchemy import or_, and_, func, Float  # أضفنا Float هنا
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import logging
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import User
@@ -12,7 +13,6 @@ from app.models.salla import SallaStore, SallaProduct
 from app.routers.auth import get_current_user
 from app.services.salla_api import SallaAPIService
 from app.services.ai_service import AIService
-from pydantic import BaseModel
 
 # إعداد logging
 logger = logging.getLogger(__name__)

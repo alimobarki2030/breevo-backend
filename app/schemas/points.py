@@ -321,3 +321,120 @@ class AdminPointsReport(BaseModel):
     
     # المستخدمين الأكثر نشاطاً
     top_users: List[Dict[str, Any]]
+
+    # أضف هذه الأسطر في نهاية الملف
+
+# Aliases للتوافق
+TransactionType = TransactionTypeEnum
+ServiceType = ServiceTypeEnum
+
+# Classes المفقودة
+class PointsBalanceUpdate(BaseModel):
+    amount: int
+    transaction_type: TransactionType
+    description: Optional[str]
+
+class PointPackagesListResponse(BaseModel):
+    packages: List[PointPackageResponse]
+    count: int
+
+class TransactionResponse(BaseModel):
+    id: int
+    user_id: int
+    transaction_type: TransactionType
+    amount: int
+    balance_before: int
+    balance_after: int
+    description: Optional[str]
+    reference_type: Optional[str]
+    reference_id: Optional[str]
+    created_at: datetime
+    
+    class Config:
+        orm_mode = True
+
+class TransactionsListRequest(BaseModel):
+    page: int = 1
+    per_page: int = 20
+    type: Optional[TransactionType] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+class TransactionsListResponse(BaseModel):
+    transactions: List[TransactionResponse]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+
+class ServicesListResponse(BaseModel):
+    services: List[ServicePricingResponse]
+    categories: List[str]
+
+class PackagePurchaseRequest(BaseModel):
+    package_id: int
+    payment_method: str = "credit_card"
+    payment_reference: Optional[str] = None
+    promo_code: Optional[str] = None
+
+class PackagePurchaseResponse(BaseModel):
+    purchase_id: int
+    package_name: str
+    points_purchased: int
+    price_paid: float
+    new_balance: int
+    payment_method: str
+    status: str
+    created_at: datetime
+
+class PointsAnalyticsRequest(BaseModel):
+    period: str = "month"
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+class PointsAnalyticsResponse(BaseModel):
+    total_purchased: int
+    total_spent: int
+    total_refunded: int
+    current_balance: int
+    usage_by_service: Dict[str, Any]
+    usage_by_month: List[Dict[str, Any]]
+    top_services: List[Dict[str, Any]]
+    average_daily_usage: float
+    average_monthly_usage: float
+    period: str
+    start_date: datetime
+    end_date: datetime
+
+class CheckBalanceRequest(BaseModel):
+    service_type: ServiceType
+    quantity: int = 1
+
+class CheckBalanceResponse(BaseModel):
+    current_balance: int
+    required_points: int
+    has_sufficient_balance: bool
+    shortage: Optional[int]
+    suggested_package: Optional[PointPackageResponse]
+
+class BulkServiceRequest(BaseModel):
+    service_type: ServiceType
+    product_ids: List[int]
+    options: Optional[Dict[str, Any]] = {}
+
+class BulkServiceResponse(BaseModel):
+    total_products: int
+    total_points: int
+    processed: int
+    failed: int
+    results: List[Dict[str, Any]]
+    new_balance: int
+
+class ServiceUsageResponse(BaseModel):
+    usage_id: int
+    service_type: ServiceType
+    service_name: str
+    points_spent: int
+    new_balance: int
+    status: str
+    created_at: datetime
