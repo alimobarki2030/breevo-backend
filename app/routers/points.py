@@ -42,6 +42,20 @@ async def get_points_balance(
     db: Session = Depends(get_db)
 ):
     """الحصول على رصيد النقاط للمستخدم"""
+    
+    # حل خاص للمالك
+    if current_user.email == "alimobarki.ad@gmail.com":
+        return PointsBalanceResponse(
+            balance=99999,
+            total_purchased=99999,
+            total_spent=0,
+            total_refunded=0,
+            monthly_points=99999,
+            monthly_points_used=0,
+            available_monthly_points=99999,
+            monthly_reset_date=datetime.utcnow() + timedelta(days=3650)  # 10 سنوات
+        )
+    
     points_service = PointsService(db)
     
     try:

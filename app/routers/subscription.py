@@ -39,8 +39,8 @@ async def get_current_subscription(
 ):
     """الحصول على الاشتراك النشط الحالي"""
     
-    # حل مؤقت للمالك - أضف إيميلك هنا
-    if current_user.email == "alimobarki.ad@gmail.com":  # ← ضع إيميلك هنا
+    # حل خاص للمالك
+    if current_user.email == "alimobarki.ad@gmail.com":
         return SubscriptionResponse(
             id=99999,
             package_id=3,
