@@ -25,7 +25,7 @@ def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
         return current_user
     
     # قائمة احتياطية للأدمن (للتوافق مع النظام القديم)
-    admin_emails = ["alimobarki.ad@gmail.com", "admin@seoraysa.com"]
+    admin_emails = ["alimobarki.ad@gmail.com", "seo@seoraysa.com"]
     
     if current_user.email in admin_emails:
         return current_user

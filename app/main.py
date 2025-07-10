@@ -16,6 +16,8 @@ from app.routers.dashboard import router as dashboard_router
 from app.routers.points import router as points_router
 from app.routers.subscription import router as subscription_router
 from app.routers.admin import router as admin_router
+from app.models import user, points
+
 
 load_dotenv()
 
