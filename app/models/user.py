@@ -15,13 +15,12 @@ class User(Base):
     store_url = Column(String, nullable=True)
     plan = Column(String, nullable=True)
     
-    # حقول إضافية للإدارة
-    is_admin = Column(Boolean, default=False)
+    # أضف هذه الحقول المفقودة
+    is_active = Column(Boolean, default=True)  # ✅ مطلوب
     is_verified = Column(Boolean, default=False)
-    is_subscribed = Column(Boolean, default=False)
-    subscription_tier = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    last_login_at = Column(DateTime, nullable=True)  # ✅ مطلوب
     
     # العلاقات
     salla_stores = relationship("SallaStore", back_populates="user")
-    points = relationship("UserPoints", back_populates="user", uselist=False)  # علاقة واحد لواحد
+    points = relationship("UserPoints", back_populates="user", uselist=False)
