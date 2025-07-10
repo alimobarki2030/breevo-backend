@@ -1,4 +1,4 @@
-# models/user.py
+# app/models/user.py
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -13,13 +13,14 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     phone = Column(String, nullable=True)
     store_url = Column(String, nullable=True)
-    plan = Column(String, nullable=True)
+    plan = Column(String, nullable=True, default="free")
     
-    # أضف هذه الحقول المفقودة
-    is_active = Column(Boolean, default=True)  # ✅ مطلوب
+    # الحقول الإضافية
+    is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    is_admin = Column(Boolean, default=False)  # ✅ حقل Admin الجديد
     created_at = Column(DateTime, default=datetime.utcnow)
-    last_login_at = Column(DateTime, nullable=True)  # ✅ مطلوب
+    last_login_at = Column(DateTime, nullable=True)
     
     # العلاقات
     salla_stores = relationship("SallaStore", back_populates="user")
