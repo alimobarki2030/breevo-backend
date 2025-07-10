@@ -38,6 +38,23 @@ async def get_current_subscription(
     db: Session = Depends(get_db)
 ):
     """الحصول على الاشتراك النشط الحالي"""
+    
+    # حل مؤقت للمالك - أضف إيميلك هنا
+    if current_user.email == "alimobarki.ad@gmail.com":  # ← ضع إيميلك هنا
+        return SubscriptionResponse(
+            id=99999,
+            package_id=3,
+            package_name="الاحترافية - مالك الموقع",
+            monthly_points=99999,
+            billing_cycle="yearly",
+            status="active",
+            started_at=datetime.utcnow(),
+            current_period_start=datetime.utcnow(),
+            current_period_end=datetime.utcnow() + timedelta(days=3650),  # 10 سنوات
+            next_billing_date=None,
+            auto_renew=False
+        )
+    
     try:
         subscription = db.query(UserSubscription).filter(
             UserSubscription.user_id == current_user.id,
