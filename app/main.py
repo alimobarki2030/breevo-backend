@@ -1,4 +1,4 @@
-# app/main.py - نسخة محدثة مع إصلاحات CORS
+# app/main.py - نسخة محدثة مع إصلاحات CORS الكاملة
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -25,27 +25,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# ✅ إعدادات CORS محدثة ومحسنة
-origins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "https://breevo-frontend.vercel.app", 
-    "https://seoraysa.com",
-    "https://www.seoraysa.com",
-    "https://breevo-backend.onrender.com",
-    "https://accounts.google.com",
-    "https://www.google.com",
-]
-
-# إضافة أي URLs إضافية من متغيرات البيئة
-if os.getenv("BACKEND_URL"):
-    origins.append(os.getenv("BACKEND_URL"))
-if os.getenv("FRONTEND_URL"):
-    origins.append(os.getenv("FRONTEND_URL"))
-
+# ✅ إعدادات CORS محدثة - إضافة allow_origins=["*"] مؤقتاً
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # السماح لجميع النطاقات مؤقتاً
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -121,14 +104,16 @@ async def log_requests(request: Request, call_next):
     # طباعة معلومات الطلب
     print(f"📨 {request.method} {request.url.path}")
     
-    # معالجة OPTIONS requests
+    # معالجة OPTIONS requests بشكل خاص
     if request.method == "OPTIONS":
         return JSONResponse(
             content={},
+            status_code=200,
             headers={
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
                 "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Credentials": "true",
             }
         )
     
@@ -136,8 +121,14 @@ async def log_requests(request: Request, call_next):
         response = await call_next(request)
         process_time = time.time() - start_time
         
-        # إضافة headers إضافية
+        # إضافة headers إضافية للتأكد
         response.headers["X-Process-Time"] = str(process_time)
+        
+        # إضافة CORS headers لجميع الاستجابات
+        origin = request.headers.get("origin")
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
         
         # طباعة معلومات الاستجابة
         print(f"✅ {request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s")
