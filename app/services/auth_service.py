@@ -1,4 +1,4 @@
-# services/auth_service.py
+# app/services/auth_service.py
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -59,6 +59,11 @@ class AuthService:
             return None
         return user
     
+    def update_last_login(self, db: Session, user: User) -> None:
+        """تحديث آخر تسجيل دخول"""
+        user.last_login_at = datetime.utcnow()
+        db.commit()
+    
     def get_user_by_id(self, db: Session, user_id: int) -> Optional[User]:
         """جلب المستخدم بالـ ID"""
         return db.query(User).filter(User.id == user_id).first()
@@ -92,6 +97,30 @@ class AuthService:
         db.add(user)
         db.commit()
         db.refresh(user)
+        return user
+    
+    def verify_google_token(self, token: str) -> dict:
+        """التحقق من Google token"""
+        # مؤقتاً - يمكن إضافة التحقق الفعلي لاحقاً
+        return {"email": "user@example.com", "name": "User"}
+    
+    def login_or_create_google_user(self, db: Session, google_data: dict) -> User:
+        """تسجيل دخول أو إنشاء مستخدم Google"""
+        email = google_data.get("email")
+        user = self.get_user_by_email(db, email)
+        
+        if not user:
+            # إنشاء مستخدم جديد
+            user_data = {
+                "email": email,
+                "full_name": google_data.get("name", email),
+                "password": "google_oauth_user",  # كلمة مرور وهمية
+                "phone": "",
+                "store_url": "",
+                "plan": "free"
+            }
+            user = self.create_user(db, user_data)
+        
         return user
 
 # إنشاء instance من الخدمة
