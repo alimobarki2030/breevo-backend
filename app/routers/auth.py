@@ -62,7 +62,7 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
         
         return TokenResponse(
             access_token=access_token,
-            user=UserResponse.from_orm(user)
+            user=UserResponse.model_validate(user)
         )
         
     except HTTPException:
@@ -96,7 +96,7 @@ def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
         
         return TokenResponse(
             access_token=access_token,
-            user=UserResponse.from_orm(user)
+            user=UserResponse.model_validate(user)
         )
         
     except HTTPException:
@@ -124,7 +124,7 @@ def google_login(request: GoogleLoginRequest, db: Session = Depends(get_db)):
         
         return TokenResponse(
             access_token=access_token,
-            user=UserResponse.from_orm(user)
+            user=UserResponse.model_validate(user)
         )
         
     except HTTPException:
@@ -138,7 +138,7 @@ def google_login(request: GoogleLoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 def get_current_user_info(current_user: User = Depends(get_current_user)):
     """الحصول على معلومات المستخدم الحالي"""
-    return UserResponse.from_orm(current_user)
+    return UserResponse.model_validate(current_user)
 
 @router.get("/verify")
 def verify_token(current_user: User = Depends(get_current_user)):

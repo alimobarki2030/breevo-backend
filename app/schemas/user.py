@@ -45,7 +45,7 @@ class UserResponse(UserBase):
     last_login_at: Optional[datetime] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # ✅ تم التغيير من orm_mode إلى from_attributes
 
 class UserUpdate(BaseModel):
     """مخطط تحديث بيانات المستخدم"""

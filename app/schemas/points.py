@@ -47,7 +47,7 @@ class PointsBalanceResponse(BaseModel):
     monthly_reset_date: Optional[datetime]
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # ✅ محدث
 
 class PointPackageBase(BaseModel):
     """الأساس لباقات النقاط"""
@@ -75,7 +75,7 @@ class PointPackageResponse(PointPackageBase):
     created_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # ✅ محدث
 
 class ServicePricingResponse(BaseModel):
     """استجابة تسعير الخدمة"""
@@ -88,7 +88,7 @@ class ServicePricingResponse(BaseModel):
     is_active: bool
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # ✅ محدث
 
 class PointTransactionBase(BaseModel):
     """الأساس لمعاملة النقاط"""
@@ -119,7 +119,7 @@ class PointTransactionResponse(PointTransactionBase):
     expires_at: Optional[datetime]
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # ✅ محدث
 
 class PurchasePointsRequest(BaseModel):
     """طلب شراء نقاط"""
@@ -215,7 +215,7 @@ class SubscriptionResponse(BaseModel):
     auto_renew: bool
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # ✅ محدث
 
 class PointsHistoryRequest(BaseModel):
     """طلب سجل النقاط"""
@@ -322,8 +322,6 @@ class AdminPointsReport(BaseModel):
     # المستخدمين الأكثر نشاطاً
     top_users: List[Dict[str, Any]]
 
-    # أضف هذه الأسطر في نهاية الملف
-
 # Aliases للتوافق
 TransactionType = TransactionTypeEnum
 ServiceType = ServiceTypeEnum
@@ -351,7 +349,7 @@ class TransactionResponse(BaseModel):
     created_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # ✅ محدث
 
 class TransactionsListRequest(BaseModel):
     page: int = 1

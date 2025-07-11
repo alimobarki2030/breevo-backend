@@ -42,7 +42,7 @@ class ProductResponse(BaseModel):
     last_synced_at: datetime
     
     class Config:
-        from_attributes = True
+        from_attributes = True  # ✅ محدث
 
 class SEOUpdateRequest(BaseModel):
     seo_title: str
