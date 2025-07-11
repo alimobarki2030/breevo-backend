@@ -60,7 +60,7 @@ async def get_points_balance(
     
     try:
         # الحصول على حساب النقاط أو إنشاؤه
-        user_points = points_service.get_or_create_user_points(current_user.id)
+        user_points = points_service.get_or_create_user_points(db, current_user.id)
         
         return PointsBalanceResponse(
             balance=user_points.balance,
@@ -97,7 +97,7 @@ async def check_balance_for_service(
         if not service_pricing:
             raise HTTPException(status_code=404, detail="الخدمة غير موجودة")
         
-        user_points = points_service.get_or_create_user_points(current_user.id)
+        user_points = points_service.get_or_create_user_points(db, current_user.id)
         required_points = service_pricing.point_cost * quantity
         has_sufficient = user_points.balance >= required_points
         shortage = max(0, required_points - user_points.balance) if not has_sufficient else None
@@ -183,7 +183,7 @@ async def purchase_point_package(
             raise HTTPException(status_code=400, detail=payment_result['message'])
         
         # إضافة النقاط
-        user_points = points_service.get_or_create_user_points(current_user.id)
+        user_points = points_service.get_or_create_user_points(db, current_user.id)
         balance_before = user_points.balance
         user_points.balance += package.points
         user_points.total_purchased += package.points
@@ -349,7 +349,7 @@ async def use_service(
             raise HTTPException(status_code=404, detail="الخدمة غير موجودة")
         
         # التحقق من الرصيد
-        user_points = points_service.get_or_create_user_points(current_user.id)
+        user_points = points_service.get_or_create_user_points(db, current_user.id)
         
         if user_points.balance < service.point_cost:
             raise HTTPException(
@@ -531,7 +531,7 @@ async def use_service_bulk(
         total_cost = service.point_cost * total_products
         
         # التحقق من الرصيد
-        user_points = points_service.get_or_create_user_points(current_user.id)
+        user_points = points_service.get_or_create_user_points(db, current_user.id)
         
         if user_points.balance < total_cost:
             raise HTTPException(
