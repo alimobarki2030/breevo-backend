@@ -42,7 +42,7 @@ class ProductResponse(BaseModel):
     last_synced_at: datetime
     
     class Config:
-        orm_mode = True = True  # ✅ محدث
+        orm_mode = True   # ✅ محدث
 
 class SEOUpdateRequest(BaseModel):
     seo_title: str
