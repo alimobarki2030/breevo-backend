@@ -55,7 +55,7 @@ class AuthService:
         user = db.query(User).filter(User.email == email).first()
         if not user:
             return None
-        if not self.verify_password(password, user.hashed_password):
+        if not self.verify_password(password, user.password):
             return None
         return user
     
@@ -88,7 +88,7 @@ class AuthService:
         user = User(
             full_name=user_data["full_name"],
             email=user_data["email"],
-            hashed_password=hashed_password,
+            password=hashed_password,
             phone=user_data.get("phone"),
             store_url=user_data.get("store_url"),
             plan=user_data.get("plan", "free")
